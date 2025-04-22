@@ -1,0 +1,1877 @@
+---
+title: "Sample Size Calculator"
+author: "Xinya Tao"
+format: pdf
+editor: visual
+---
+
+#### PART 0: Plot and parameters calculation
+
+```{r}
+    
+    ##----- (1) calculate params for binormal assumption  
+      estimate_binorm_params <- function(AUC, ratio){
+        
+        #--------------------------#
+        #  Calculate parameters for ROC curve follows a binormal distribution assumption 
+        
+        #  Args: 
+        #    AUC: estimated areas under the ROC curve 
+        #    Ratio: the ratio of standard deviations (Sx/Sy)  
+        
+        #  Returns: 
+        #     a:
+        #     b:  
+        #--------------------------#  
+        
+        # validate inputs
+        if (!is.numeric(AUC) || AUC <= 0.5 || AUC >= 1) {
+          stop("AUC must be a numeric value between 0.5 and 1 (exclusive).")
+        }
+        
+        if (!is.numeric(ratio) || ratio <= 0) {
+          stop("Ratio must be a positive numeric value.")
+        }
+  
+        # compute params
+        b <- ratio
+        a <- round(qnorm(AUC) * sqrt(1 + b^2),2)
+
+        # output
+        return(list(a = a, b = b))
+
+      }
+
+      
+    ## test
+      estimate_binorm_params(AUC=0.8, ratio=1)
+
+
+    ##----- (2) plot AUC follows a binormal curve 
+      plot_binorm_ROC <- function(a, b) {
+  
+        #--------------------------#
+        #  plot AUC curve follows a binormal dist
+        
+        #  Args:
+        #     a (>0; e.g., 0.8, 0.85, 0.9 etc.)
+        #     b (>0; e.g., 1, 2, 3, etc.)
+        
+        #  Returns: 
+        #     ROC curve  
+        #--------------------------#  
+        
+        # load required packages 
+        if (!requireNamespace("ggplot2", quietly = TRUE) || !requireNamespace("pROC", quietly = TRUE)) {
+          stop("Packages 'ggplot2' and 'pROC' are required. Please install them first.")
+        }
+  
+        # validate input 
+        if (!is.numeric(a) || length(a) != 1) {
+          stop("'a' must be a single numeric value.")
+        }
+          
+        if (!is.numeric(b) || length(b) != 1 || b <= 0) {
+          stop("'b' must be a single positive numeric value.")
+        }
+    
+        # set seed for reproducibility
+        set.seed(123)
+    
+        # generate binormal samples
+        n <- 1000  
+        controls <- rnorm(n, mean = 0, sd = 1)      
+        cases <- rnorm(n, mean = a, sd = 1) 
+    
+        # construct response labels and scores
+        labels <- factor(c(rep(0, n), rep(1, n)), levels = c(0, 1))  
+        scores <- c(controls, cases)
+    
+        # compute ROC curve
+        roc_obj <- pROC::roc(labels, scores)
+    
+        # compute AUC value
+        auc_value <- pROC::auc(roc_obj)
+    
+        # create ROC plot
+        pROC::ggroc(
+                data        = roc_obj, 
+                legacy.axes = TRUE, 
+                color       = "tomato", 
+                size        = 0.8
+        ) +
+        ggplot2::geom_abline(
+                    slope     = 1, 
+                    intercept = 0, 
+                    linetype  = "dashed", 
+                    color     = "darkgrey", 
+                    size      = 0.8
+        ) +
+        ggplot2::ggtitle(paste0("ROC Curve (Binormal Distribution, a = ", a, ", b = ", b, ")")) +
+        ggplot2::annotate(
+          geom     = "text", 
+          x        = 0.9, 
+          y        = 0.0, 
+          label    = paste0("AUC = ", round(auc_value, 3)), 
+          size     = 4, 
+          color    = "black", 
+          fontface = "bold"
+        ) +  
+        ggplot2::theme_bw(base_size = 14) +
+        ggplot2::theme(
+          plot.title  = ggplot2::element_text(hjust = 0.5, face = "bold", size = 12),
+          axis.title  = ggplot2::element_text(face = "bold"),
+          axis.text   = ggplot2::element_text(size = 12)
+      )
+}
+
+    # test
+      plot_binorm_ROC(1.19,1)
+      
+    ##----- (3) sample size calculator    
+      estimate_diagnostic_sample_size <- function(var_function, alpha=0.05, beta=NULL, delta, test_type){
+  
+        
+        #--------------------------#
+        #  Sample size calculator for diagnostic accuracy tests
+        
+        #  Args: 
+        #     var_function: variance function 
+        #     alpha: significant level
+        #     beta: Type II error rate (1 - power) 
+        #     delta: the desired length of one-half of the CI
+        #     test_type: "one_diagnostic","multi_diagnostic","inferiority","equivalency"  
+        
+        #  Returns: 
+        #     Sample size matrics
+        
+        #--------------------------#    
+        
+        
+        # (1) ----- Validate inputs
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1, or NULL.")
+        }
+        
+        if (!is.numeric(delta) || delta <= 0) {
+          stop("delta must be a positive numeric value.")
+        }
+        
+        if (!is.character(test_type) || !(test_type %in% c("one_diagnostic", "multi_diagnostic", "inferiority", "equivalency"))) {
+          stop("test_type must be one of 'one_diagnostic', 'multi_diagnostic', 'inferiority' or 'equivalency'.")
+        }
+  
+        
+        # (2) ----- Calculation module
+        
+        ## calculate critical value
+        z_alpha <- qnorm(1 - alpha / 2)
+        z_beta <- ifelse(is.null(beta), 0, qnorm(1 - beta))
+  
+        ## calculate sample size based on test type
+        N_total <- switch(test_type,
+                     "one_diagnostic" = {  
+                       if (!is.numeric(var_function) || length(var_function) != 1) {
+                          stop("For 'one_diagnostic', var_function must be a single numeric value.")
+                        }
+                        numerator <- ((z_alpha + z_beta) * sqrt(var_function))^2
+                        ceiling(numerator / delta^2)
+                    },
+                    
+                    "multi_diagnostic" = {  
+                      if (!is.numeric(var_function) || length(var_function) != 2) {
+                        stop("For 'multi_diagnostic', var_function must be a numeric vector of length 2.")
+                      }
+                      numerator <- (z_alpha * sqrt(var_function[1]) + z_beta * sqrt(var_function[2]))^2
+                      ceiling(numerator / delta^2)
+                    },
+                    
+                    "inferiority" = {  
+                      if (!is.numeric(var_function) || length(var_function) != 1) {
+                        stop("For 'inferiority', var_function must be a single numeric value.")
+                      }
+                      numerator <- (z_alpha + z_beta)^2 * var_function
+                      ceiling(numerator / delta^2)
+                    },
+                    
+                    "equivalency" = {  
+                      if (!is.numeric(var_function) || length(var_function) != 1) {
+                        stop("For 'equivalency', var_function must be a single numeric value.")
+                      }
+                      numerator <- (z_alpha + z_beta)^2 * var_function
+                      ceiling(numerator / delta^2)
+                    }
+                      
+                    stop("Invalid test type. Use 'one_diagnostic', 'multi_diagnostic', 'inferiority' or 'equivalency'.") 
+  )
+
+      #  (3) ----- Structured outputs
+      return(N_total)
+
+}
+
+
+    # test
+      estimate_diagnostic_sample_size(var_function = 0.8, alpha = 0.05, beta = 0.2, delta = 0.1, test_type = "one_diagnostic")
+      estimate_diagnostic_sample_size(var_function = c(0.2, 0.3), alpha = 0.05, beta = 0.2, delta = 0.1, test_type = "multi_diagnostic")
+      
+      
+      
+      ##----- (4) adjust sample size by prevalence
+ 
+    adjust_sample_by_prevalence <- function(sample, prev, beta) {
+      
+      
+        #--------------------------#
+        #  Adjust Sample size by prevalence (prospective study)
+        
+        #  Args: 
+        #     sample: unadjusted sample size 
+        #     prev: the prevalence of the condition in the population 
+        #     beta: Type II error rate (1 - power) 
+        
+        #  Returns: 
+        #     adjusted sample size
+        
+        #--------------------------# 
+      
+    
+        #  (1) ----- Validate inputs
+        if (!is.numeric(sample) || sample <= 0 || !(sample == round(sample))) {
+          stop("initial sample must be an integer value more than 1.")
+        }
+      
+        if (!is.numeric(prev) || prev <= 0 || prev >= 1) {
+          stop("prevalence must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1")
+        }
+        
+    
+        #  (2) ----- Calculation modules
+        
+        
+        ## calculate critical value
+        z_beta <- qnorm(beta)
+         
+        ## calculate quadratic equation coefficients 
+        a <- prev^2
+        b <- -2 * prev * sample - prev * (1 - prev) * z_beta^2
+        c <- sample^2  
+        
+        # calculate revised sample size
+        n_adjusted <- ceiling((-b + sqrt(b^2 - 4 * a * c)) / (2 * a))
+        
+        
+        #  (3) ----- Structured outputs
+        
+        ## method reference
+        method <- "Sample size adjusted method based on prevalence"
+        
+        structure(
+          list(
+            method = method,
+            power = 1 - beta,
+            prevalence = prevalence,
+            adjusted_sample_size = n_revised
+          ),
+          class = "Sample Size Adjustment"
+        )
+          
+      }
+     
+      # test
+      adjust_sample_by_prevalence(sample=350,  prevalence=0.8, beta=0.9) 
+    
+
+      ##----- (5) adjust sample size for clustered data
+      adjust_sample_for_cluster <- function(sample, avg_obs_per_patient, intra_corr, R = 1) {
+      
+        #--------------------------#
+        #  Adjust Sample size for clustered data 
+        
+        #  Args: 
+        #     sample: number of required samples if each patients had only one observation 
+        #     avg_obs_per_patient: average number of observations per patient 
+        #     intra_corr: average correlation between test results of observations from the same patient 
+        #     R: the ratio of patients with and without the condition
+        
+        #  Returns: 
+        #     adjusted sample size
+        
+        #--------------------------# 
+        
+        
+        
+        #  (1) ----- Validate inputs
+        if (!is.numeric(sample) || sample <= 0 || !(sample == round(sample))) {
+          stop("initial sample must be an integer value more than 1.")
+        }
+      
+        if (!is.numeric(avg_obs_per_patient) || avg_obs_per_patient <= 1) {
+          stop("avg_obs_per_patient must be a positive numeric value more than 1.")
+        }
+        
+        if (!is.numeric(intra_corr) || intra_corr <= 0 || intra_corr >= 1) {
+          stop("intra_corr must be a numeric value between 0 and 1")
+        }
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+  
+        #  (2) ----- Calculation modules
+        
+        obs_required <- sample * (1 + (avg_obs_per_patient - 1) * intra_corr)
+        n_required <- obs_required / avg_obs_per_patient
+      
+        n_with_condition <- ceiling(n_required / (1+R))
+        n_without_condition <- ceiling(R * n_required / (1+R))   
+        n_revised <- n_with_condition + n_without_condition
+        
+        
+        #  (3) ----- Structured outputs
+        
+        ## method reference
+        method <- "Sample size adjusted method for cluster data"
+        
+        structure(
+          list(
+            method = method,
+            initial_sample_size = n_initial,
+            avg_obs_per_patient = avg_obs_per_patient,
+            intra_cluster_corr = intra_corr,
+            revised_sample_size = n_revised,
+            n_with_condition <- n_with_condition,
+            n_without_condition <- n_without_condition   
+            
+          ),
+          class = "Sample Size Adjustment"
+        )
+      
+    }
+
+    adjust_sample_for_cluster(sample = 46, avg_obs_per_patient = 1.5, intra_corr = 0.5)
+    
+    
+    
+    ##----- (5) adjust sample size by one test with fixed size 
+    
+    adjust_sample_by_fixed_group <- function(n_fixed_group, n_total) {
+  
+      #--------------------------#
+      #  adjust sample size when sample size for one group is fixed (for unapired study design)  
+      
+      #  Args: 
+      #     n_fixed_group: number of required samples if each patients had only one observation 
+      #     n_total: expected total sample size  
+      
+      #  Returns: 
+      #     sample size: (known group, unknown group, total)
+      
+      #--------------------------#   
+      
+      #  (1) ----- Validate inputs
+      if (!is.numeric(n_fixed_group) || n_fixed_group <= 0 || !(n_fixed_group == round(n_fixed_group))) {
+          stop("n_fixed_group must be an integer value more than 1.")
+      }
+      
+      if (!is.numeric(n_total) || n_total <= 0 || !(n_total == round(n_total)) || n_total <= n_fixed_group) {
+          stop("n_total must be an integer value larger than n_fixed_group.")
+        }
+      
+      
+      #  (2) ----- Calculation modules
+      n_unknown_group <- ceiling((n_total*n_fixed_group) / (2*n_fixed_group - n_total) )
+      n_total <- n_fixed_group + n_unknown_group 
+        
+      #  (3) ----- Structured outputs
+  
+      ## reference method
+      method <- "Sample size method for comparing sensitivity/specificity by by Cohen (1977)"
+  
+      structure(
+        list(
+          method = method,
+          N_total = n_total,
+          n_test1 = n_fixed_group,
+          n_test2 = n_unknown_group
+        ),
+        class = "Sample Size Adjustment"
+      )
+  
+  
+}
+```
+
+#### PART 1: Sample size estimation
+
+##### (1) Estimate sensitivity/specificity
+
+```{r}
+    ##----- (1) calculate sensitivity/specificity (not closed to 1)   
+      sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
+  
+        #--------------------------#
+        #  Sample size calculation when estimating sensitivity or specificity 
+        
+        #  Args: 
+        #     theta: expected sensitivity or specificity 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     L: the desired length of one-half of the CI
+        
+        #  Returns: 
+        #     sample size: (total)
+        
+        #--------------------------# 
+        
+        
+        #  (1) ----- validate inputs 
+         
+        if (!is.numeric(theta) || theta <= 0 || theta >= 1) {
+          stop("theta must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1, or NULL.")
+        }
+        
+        if (!is.numeric(L) || L <= 0 || L > 0.5 ) {
+          stop("L must be a numeric value between 0 and 0.5.")
+        } 
+        
+        #  (2) ----- Calculation modules
+        
+        ## calculate variance function 
+        var_function <- theta*(1-theta)
+        
+        ## calculate sample size 
+        N_total <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = L, 
+          test_type = "one_diagnostic"
+        )
+        
+        # method description
+        
+        #  (3) ----- Structured outputs
+        
+        ## method reference
+        method <- "Sample size method for estimating sensitivity/specificity by Arkin and Wachtel (1990)"
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta), "NULL", 1 - beta),
+            method = method,
+            sample_size = N_total
+          ),
+          class = "Single diagnostic test")
+
+      }
+  
+      # test
+      sample_one_sesp(theta = 0.8, alpha = 0.05, beta = 0.2, L = 0.05)
+      sample_one_sesp(theta = 0.8, alpha = 0.05, L = 0.05)
+      
+      
+    ##----- (2) calculate sensitivity/specificity (closed to 1)  
+    
+      
+    ## add methods  
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+        
+      
+    ##----- (3) calculate sensitivity/specificity at fixed fpr
+      sample_estimate_sesp_fixed_fpr <- function(A, b=1, fpr, alpha=0.05, beta=NULL, L, R=1, dist="binorm") {
+    
+        #--------------------------#
+        #  Sample size calculation when estimating sensitivity or specificity at fixed fpr 
+        
+        #  Args: 
+        #     A: expected area under the ROC curve
+        #     b: the ratio of standard deviations (Sx/Sy) 
+        #     fpr: false positive rate 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     L: the desired length of one-half of the CI
+        #     R: the ratio of patients with and without the condition
+        #     dist: assumption, "binorm" and "obs_binorm" 
+        
+        #  Returns: 
+        #     sample size: (with condition, without condition, total)
+        
+        #--------------------------# 
+        
+        
+        #  (1) ----- validate inputs 
+        if (!is.numeric(A) || A <= 0 || A >= 1) {
+          stop("A must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b) || b <= 0) {
+          stop("b must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(fpr) || fpr <= 0 || fpr >= 1) {
+          stop("A must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1, or NULL.")
+        }
+        
+        if (!is.numeric(L) || L <= 0 || L > 0.5) {
+          stop("L must be a numeric value between 0 and 0.5.")
+        } 
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        if (!is.character(dist) || !(dist %in% c("binorm", "obs_binorm"))) {
+          stop("dist must be one of 'binorm' or 'obs_binorm'.")
+        }
+        
+        
+        #  (2) ----- calculation modules 
+      
+        ## calculate z-transform parameters
+        g <- qnorm(fpr)
+        a <- estimate_binorm_params(A, b)$a
+        
+        ## calculate variance function 
+        if (dist == "binorm") {
+      
+          var_function <- 1 + b^2 / R + a^2 / 2 + g^2 * b^2 * (1 + R) / (2 * R)
+          method <- "Sample size method for estimating sensitivity at fixed FPR from Obuchowski and McClish (1997)"
+            
+        } else if(dist == "obs_binorm") {
+          
+          var_function <- 1 + b^2 / R + a^2 / 2 + g^2 * b^2 * (1 + R) / (2 * R) + g * a * b
+          method <- "Sample size method for estimating sensitivity at fixed FPR from Obuchowski and McClish (1997)"  
+        
+        } else {
+          
+          stop("Invalid 'dist' value. Use 'binorm' or 'obs_binorm'.")
+          
+        }
+          
+        ## calculate range of sensitivity  
+        se0 <- pnorm(a + b * qnorm(fpr))
+        a_lwr <- qnorm(se0 - L) - b * qnorm(fpr)
+        a_upr <- qnorm(se0 + L) - b * qnorm(fpr)
+        
+        ## calculate range of Z-value and delta 
+        z_lwr <- a_lwr + b * qnorm(fpr)
+        z_upr <- a_upr + b * qnorm(fpr)
+        z_delta <- (z_upr - z_lwr) / 2
+        
+        ## calculate sample size 
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = z_delta, 
+          test_type = "one_diagnostic"
+          )
+        
+        ## calculate number of patients with and without the condition
+        n_with_condition <- ceiling(n)
+        n_without_condition <- ceiling(n*R)
+        
+        N_total <- n_with_condition + n_without_condition
+         
+        
+        #  (3) ----- structured outputs 
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1-beta),
+            method = method,
+            sample_size = N_total,
+            n_with_condition = n_with_condition,
+            n_without_condition = n_without_condition
+          ),
+          class = "Single diagnostic test")
+    
+  }
+
+    # test
+      sample_sesp_fixed_fpr(A = 0.8, b = 1, fpr = 0.1, alpha = 0.05, beta = NULL, L = 0.1, R = 1, dist = "binorm")
+      sample_sesp_fixed_fpr(A = 0.8, b = 1, fpr = 0.1, alpha = 0.05, beta = 0.2, L = 0.1, R = 1, dist = "binorm")
+```
+
+##### **(2) Estimate AUC (Full and partial )**
+
+```{r}
+
+    ##----- (1) calculate full AUC
+      sample_estimate_full_ROC <- function(A, b=1, alpha=0.05, beta=NULL, L, R=1, dist="any") {
+  
+        #--------------------------#
+        #  Sample size calculation when estimating full auc 
+        
+        #  Args: 
+        #     A: expected area under the ROC curve
+        #     b: the ratio of standard deviations (Sx/Sy) 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     L: the desired length of one-half of the CI
+        #     R: the ratio of patients with and without the condition
+        #     dist: the premise assumption, must be one of "any", "exp", "binorm", "obs_binorm"  
+        
+        #  Returns: 
+        #     sample size: (with condition, without condition, total)
+        
+        #--------------------------# 
+
+   
+        #  (1) ----- validate inputs 
+        if (!is.numeric(A) || A <= 0 || A >= 1) {
+          stop("A must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b) || b <= 0) {
+          stop("b must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1, or NULL.")
+        }
+        
+        if (!is.numeric(L) || L <= 0 || L > 0.5) {
+          stop("L must be a numeric value between 0 and 0.5.")
+        } 
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        if (!is.character(dist) || !(dist %in% c("any", "exp", "binorm", "obs_binorm"))) {
+          stop("dist must be one of 'any', 'exp', 'binorm' or 'obs_binorm'.")
+        }
+        
+      
+        #  (2) ----- calculation modules 
+        
+        ## calculate variance function  
+        var_function <- switch(
+          dist,
+          "any" = {
+            method <- "Sample size method for estimating AUC by Blume (2009)"
+            A * (1 - A)
+          },
+          "exp" = {
+            method <- "Sample size method for estimating AUC by Hanley and McNeil (1982)"
+            A / (2 - A) / R + 2 * A^2 / (1 + A) - A^2 * (1 / R + 1)
+          },
+          "binorm" = {
+            method <- "Sample size method for estimating AUC by Obuchowski (1994)"
+            a <- estimate_binorm_params(A, b)$a
+            (0.0099) * exp(-a^2 / 2) * ((5 * a^2 + 8) + (a^2 + 8) / R)
+          },
+          "obs_binorm" = {
+            method <- "Sample size method for estimating AUC by Obuchowski and McClish (1997)"
+            a <- estimate_binorm_params(A, b)$a
+            (0.0099) * exp(-a^2 / 2) * ((5 * a^2 + 8) + (a^2 + 8) / R) - 0.0398 * a^2 * exp(-a^2 / 2)
+          },
+          stop("Invalid 'dist' value. Use 'any', 'exp', 'binorm', or 'obs_binorm'.")
+        )
+        
+        ## calculate sample size 
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = L, 
+          test_type = "one_diagnostic"
+          )
+        
+        ## calculte number of patients with and without the condition
+        if (dist == "any" & R < 1) {
+          
+          n_with_condition <- ceiling(n*R)
+          n_without_condition <- ceiling(n)
+          
+        } else { 
+          
+          n_with_condition <- ceiling(n)
+          n_without_condition <- ceiling(n*R)
+        } 
+      
+        N_total <- n_with_condition + n_without_condition
+        
+        #  (3) ----- structured outputs   
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1 - beta),
+            method = method,
+            sample_size = N_total,
+            n_with_condition = n_with_condition,
+            n_without_condition = n_without_condition
+          ),
+          class = "Single diagnostic test")
+ 
+}
+
+    ## test 
+      lapply(X = c("any", "exp", "binorm", "obs_binorm"), 
+            FUN = function(dist) sample_estimate_full_ROC(A = 0.8, alpha = 0.05, beta = 0.2, L = 0.1, R = 1, dist = dist))
+
+  
+    ##----- (2) calculate patrial AUC 
+      sample_estimate_partial_auc <- function(A, b=1, e1, e2, alpha=0.05, beta=NULL, L, R=1, dist="binorm") {
+      
+      
+        #--------------------------#
+        #  Sample size calculation when estimate patrial AUC
+        
+        #  Args: 
+        #     A: expected area under the ROC curve
+        #     b: the ratio of standard deviations (Sx/Sy) 
+        #     e1: the lower bound of fpr
+        #     e2: the upper bound of fpr
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     L: the desired length of one-half of the CI
+        #     R: the ratio of patients with and without the condition
+        #     dist: premise assumption, must be one of "binorm" and "obs_binorm"
+        
+        #  Returns: 
+        #     sample size: (with condition, without condition, total)
+        
+        #--------------------------# 
+      
+        
+        
+        #  (1) ----- validate inputs 
+        
+        if (!is.numeric(A) || A <= 0 || A >= 1) {
+          stop("A must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b) || b <= 0) {
+          stop("b must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(e1) || e1 <= 0 || e1 >= 1) {
+          stop("e1 must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(e2) || e2 <= 0 || e2 >= 1) {
+          stop("e2 must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.null(beta) && (!is.numeric(beta) || beta <= 0 || beta >= 1)) {
+          stop("beta must be a numeric value between 0 and 1, or NULL.")
+        }
+        
+        if (!is.numeric(L) || L <= 0 || L > 0.5) {
+          stop("L must be a numeric value between 0 and 0.5.")
+        } 
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        if (!is.character(dist) || !(dist %in% c("binorm", "obs_binorm"))) {
+          stop("dist must be one of 'binorm' or 'obs_binorm'.")
+        }
+        
+        
+        #  (2) ----- calculation modules 
+
+    
+        ## calculate parameters a, e', and e''
+        a <- estimate_binorm_params(A, b)$a 
+        e_prime <- (qnorm(c(e1,e2)) + a * b * (1+b^2)^(-1)) * sqrt(1 + b^2)
+        e_double_prime <- (e_prime)^2 / 2 
+          
+        
+        ## calculate variance function
+        expr1 <- exp(-a^2 / 2 / (1 + b^2))
+        expr2 <- 1 + b^2
+        expr3 <- pnorm(e_prime[2]) - pnorm(e_prime[1])
+        expr4 <- exp(-e_double_prime[1]) - exp(-e_double_prime[2])
+          
+        f <- expr1 * (2 * pi * expr2)^(-1 / 2) * expr3
+        g <- expr1 * (2 * pi * expr2)^(-1) * expr4 - a * b * expr1 * (2 * pi * expr2^3)^(-1 / 2) * expr3
+      
+        var_function <- switch(
+          dist,
+          "binorm" = f^2 * (1 + b^2 / R + a^2 / 2) + g^2 * (b^2 * (1 + R) / (2 * R)),
+          "obs_binorm" = f^2 * (1 + b^2 / R + a^2 / 2) + g^2 * (b^2 * (1 + R) / (2 * R)) + f * g * a * b,
+          stop("Invalid 'dist' value. Use 'binorm' or 'obs_binorm'.")
+        )
+        
+        ## calculate delta 
+        delta <- (e1-e2)*L
+        
+        ## calculate sample size 
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = delta, 
+          test_type = "one_diagnostic"
+          )
+        
+        ## calculate number of patients with and without condition
+        n_with_condition <- ceiling(n)
+        n_without_condition <- ceiling(n*R)
+        N_total <- n_with_condition + n_without_condition 
+        
+        
+        #  (3) ----- structured outputs 
+        
+        ## method reference  
+        method <- "Sample size method for estimating partial AUC by Obuchowski and McClish (1997)"
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1-beta),
+            method = method,
+            sample_size = N_total,
+            n_with_condition = n_with_condition,
+            n_without_condition = n_without_condition
+          ),
+          class = "Single diagnostic test")
+     }
+
+
+    ## test
+      sample_estimate_partial_auc(A = 0.8, e1 = 0, e2 = 0.1, b = 1, alpha = 0.05, beta, L = 0.1, R = 1, dist = "binorm")
+ 
+ 
+    ##----- (3) AUC hypothesis testing
+      sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternative="two.sided", R=1) {
+      
+        #--------------------------#
+        #  Sample size calculation when testing hypothesis that auc is equal to particular value
+        
+        #  Args: 
+        #     A_null: AUC under the null hypothesis
+        #     A_alter: AUC under the alternative hypothesis
+        #     b: the ratio of standard deviations (Sx/Sy) 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     alternative: alternative hypothesis, must be one of "less","greater","two-sided"
+        #     R: the ratio of patients with and without the condition
+        
+        #  Returns: 
+        #     sample size: (with condition, without condition, total)
+        
+        #--------------------------# 
+    
+        #  (1) ----- validate inputs 
+        
+        if (!is.numeric(A_null) || A_null <= 0 || A_null >= 1) {
+          stop("A_null must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(A_alter) || A_alter <= 0 || A_alter >= 1) {
+          stop("A_alter must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b) || b <= 0) {
+          stop("b must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(beta) || beta <= 0 || beta >= 1) {
+          stop("beta must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.character(alternative) || !(alternative %in% c("two.sided", "greater", "less"))) {
+          stop("alternative must be one of 'two.sided', 'greater' or 'less'.")
+        }
+       
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        #  (2) ----- calculation modules 
+  
+        ## calculate variance function 
+        a0 <- estimate_binorm_params(A_null, b)$a
+        V0_theta <- (0.0099) * exp(-a0^2 / 2)*((5 * a0^2 + 8)+(a0^2 + 8) / R)
+        
+        aA <- estimate_binorm_params(A_alter, b)$a
+        VA_theta <- (0.0099) * exp(-aA^2 / 2)*((5 * aA^2 + 8)+(aA^2 + 8) / R)
+        
+        var_function <- c(V0_theta, VA_theta)
+        delta <- abs(A_null - A_alter)
+        
+        ## adjust alpha for alternative test
+        alpha <- switch(
+          alternative,
+          "less" = 2 * alpha,
+          "greater" = 2 * alpha,
+          "two.sided" = alpha,
+          stop("Invalid 'alternative' value. Use 'less', 'greater', or 'two.sided'.")
+        )
+        
+        ## calculate sample size
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = delta, 
+          test_type = "multi_diagnostic"
+          )
+        
+        ## calculate patients with and without condition 
+        n_with_condition <- ceiling(n)
+        n_without_condition <- ceiling(n*R)
+        N_total <- n_with_condition + n_without_condition
+  
+        
+        #  (3) ----- structured outputs
+        
+        ## method 
+        method <- switch(
+          alternative,
+          "less" = paste0("Non-inferiority test: AUC < ",A_null),
+          "greater" = paste0("Superiority test: AUC > ",A_null),
+          "two.sided" = paste0("Equivalence test: AUC = ",A_null)  
+        )
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL", 1 - beta),
+            method = method,
+            sample_size = N_total,
+            n_with_condition = n_with_condition,
+            n_without_condition = n_without_condition
+          ),
+          class = "Single diagnostic test")
+      
+    }
+        
+      sample_hypotest_auc(A_null = 0.5, A_alter = 0.8, alpha = 0.05, beta = NULL, alternative = "two.sided", R = 1)  
+    
+```
+
+##### (3) Compare sensitivity/specificity
+
+```{r}
+
+    ##----- (1) compare the sensitivity/specificity of two tests
+      sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alpha=0.05, beta, paired=FALSE) {
+       
+        
+        #--------------------------#
+        #  Sample size calculation when comparing test's sensitivity or specificity 
+        
+        #  Args: 
+        #     theta1: the expected sensitivity (or specificity) of test1 
+        #     theta2: the expected sensitivity (or specificity) of test2
+        #     prob_t1pos_give_t2pos: probability that test 1 is positive given that test 2 is positive 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     paired: paired study design or unpaired study design, must be "True" or "False"
+        
+        #  Returns: 
+        #     sample size: (test1, test2, total)
+        
+        #--------------------------#   
+        
+        
+        #  (1) ----- validate inputs 
+        
+        if (!is.numeric(theta1) || theta1 <= 0 ||theta1 >= 1) {
+          stop("theta1 must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(theta2) || theta2 <= 0 || theta2 >= 1) {
+          stop("theta2 must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(prob_t1pos_give_t2pos) || prob_t1pos_give_t2pos < 0 || prob_t1pos_give_t2pos > 1) {
+          stop("prob_t1pos_give_t2pos must be a numeric value between 0 and 1(inclusive).")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(beta) || beta <= 0 || beta >= 1) {
+          stop("beta must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.logical(paired) || length(paired) != 1) {
+          stop("'paired' must be a single logical value (TRUE or FALSE).")
+        }
+        
+       
+        #  (2) -----  calculation modules 
+        
+        message("null_hypothesis: theta_test1 = theta_test2")
+        
+        ## calculate variance fucntion 
+        fi <- theta1 + theta2 - 2 * theta2 * prob_t1pos_give_t2pos 
+        delta1 <- theta1 - theta2
+        
+        V0_delta_theta <- fi
+        VA_delta_theta <- fi - delta1^2
+        
+        var_function <- c(V0_delta_theta, VA_delta_theta)
+        
+        ## calculate sample size 
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = delta1, 
+          test_type = "multi_diagnostic")
+        
+        ## calculate number of patients for each test 
+        n_test1 <- n_test2 <- ceiling(n/2)
+        N_total <- n_test1 + n_test2 
+        
+        
+        #  (3) ----- structured outputs 
+        
+        ## method reference
+        method <- "Sample size method for comparing tests' sensitivity/specificity by Beam (1992)"
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta), "NULL", 1-beta),
+            method = paste0(method, ifelse(paired, "- Paired", "- Unpaired")),
+            sample_size = N_total,
+            n_test1 = n_test1,
+            n_test2 = n_test2
+          ),
+            class = "Two diagnostic tests")
+      
+      }
+      
+      ## test
+      sample_cmp_sesp(theta1 = 0.8, theta2 = 0.7, prob_t1pos_give_t2pos, alpha = 0.05, beta = 0.2, delta = 0.1, paired = FALSE)
+
+
+      sample_cmp_sesp(theta1 = 0.8, theta2 = 0.7, prob_t1pos_give_t2pos = 1, alpha = 0.05, beta = 0.2, delta = 0.1, paired = TRUE)
+
+
+
+
+    ##----- (2) compare the ppv/npv of two tests (补充unpaired方法)
+      sample_compare_ppvnpv <- function(metric="PPV", theta2, p, alpha=0.05, beta, gamma, delta, paired=TRUE, alternative="two.sided") {
+        
+        #--------------------------#
+        #  Sample size calculation when comparing test's positive/negative predictive values 
+        
+        #  Args:
+        #     metric: index to be compared between two diagnostic tests, must be one of "PPV" or "NPV"  
+        #     theta2: the expected NPV (or PPV) of test2 
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power)
+        #     p: the proportion vector with 8 elements: 
+        #       for patients without the condition, 
+        #         p1: the pr of patients (test1 +, test2 +);
+        #         p2: the pr of patients (test1 +, test2 -);
+        #         p3: the pr of patients (test1 -, test2 +);
+        #         p4: the pr of patients (test1 -, test2 -). 
+        #       for patients with the condition, 
+        #         p5: the pr of patients (test1 +, test2 +); 
+        #         p6: the pr of patients (test1 +, test2 -); 
+        #         p7: the pr of patients (test1 -, test2 +); 
+        #         p8: the pr of patients (test1 -, test2 -).
+        #     gamma: a specific value of interest for rPPV/rNPV under the alternative hypothesis (gamma > 0)
+        #     delta: a specific value of interest in the null hypothesis (In most cases, let delta = 1).
+        #     paired: paired study design or unpaired study design, must be "True" or "False"
+        
+        
+        #  Returns: 
+        #     sample size: (test1, test2, total)
+        
+        #--------------------------# 
+        
+        #  (1) ----- validate inputs 
+        
+        if (!metric %in% c("PPV", "NPV")) {
+          stop("'metric' must be either 'PPV' or 'NPV'.")
+        }
+        
+        if (!is.numeric(theta2) || theta2 <= 0 || theta2 >= 1) {
+          stop("'theta2' must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(p) || length(p) != 8 || any(p < 0 | p > 1)) {
+          stop("'p' must be a numeric vector of length 8 with values between 0 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("'alpha' must be a numeric value between 0 and 1 .")
+        }
+        
+        if (!is.numeric(beta) || beta <= 0 || beta >= 1) {
+          stop("'beta' must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(gamma) || gamma <= 0) {
+          stop("'gamma' must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(delta) || delta <= 0) {
+          stop("'delta' must be a positive numeric value.")
+        }
+        
+        if (!is.logical(paired) || length(paired) != 1) {
+          stop("'paired' must be a single logical value (TRUE or FALSE).")
+        }
+        
+        if (!alternative %in% c("less", "greater", "two.sided")) {
+          stop("'alternative' must be one of 'less', 'greater', or 'two.sided'.")
+        }
+        
+        
+        #  (2) -----  calculation modules
+        null_hypothesis <- switch(
+          alternative,
+          "less" = paste0("null hypothesis: r", metric," > ", delta),
+          "greater" = paste0("null hypothesis: r", metric, " < ", delta),
+          "two.sided" = paste0("null hypothesis: r", metric, " = ", delta)  
+        )
+        message(print(null_hypothesis))  
+        
+        
+        ## adjust alpha for one-sided or two-sided test
+        alpha <- switch(
+          alternative,
+          "less" = 2 * alpha,
+          "greater" = 2 * alpha,
+          "two.sided" = alpha,
+          stop("Invalid 'alternative' value. Use 'less', 'greater', or 'two.sided'.")
+        )
+        
+        ## calculate critical values 
+        z_alpha <- qnorm(1 - alpha / 2) 
+        z_beta <- qnorm(1 - beta)
+        
+        ## calculate sample size
+        if(metric == "PPV") {
+          
+          m1 <- ((z_alpha + z_beta) / log10(gamma / delta))^2
+          m2 <- ((p[5] + p[6]) * (p[5] + p[7])) ^ (-1)
+          m3 <- 2 * (p[7] + p[3]) * gamma * theta2^2 +
+                (p[5] * (1 - gamma) - p[6]) * theta2 +
+                p[6] + p[7] * (1 - 3 * gamma * theta2)
+            
+        } else if(metric == "NPV") {
+          
+          m1 <- ((z_alpha + z_beta)^2 / log10(gamma / delta))^2
+          m2 <- ((p[2] + p[4]) * (p[3] + p[4])) ^ (-1)
+          m3 <- -2 * (p[4] + p[8]) * gamma * theta2^2 +
+                (-p[3] + p[4] - gamma * (p[2] - p[4])) * theta2 +
+                p[2] + p[3]
+        } else {
+          stop("Invalid 'choice' value. Use 'PPV' or 'NPV'.")
+        }
+        
+        ## calculate patients in each test
+        n <- ceiling(m1*m2*m3)
+        n_test1 <- n_test2 <- ceiling(n/2)
+        N_total <- n_test1 + n_test2 
+        
+        
+        #  (3) ----- structured outputs 
+        
+        ## method reference
+        method <- "Sample size method for comparing test's positive/negative predictive values by Moskowize and Pepe(2006)"
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1-beta),
+            method = paste0(method, ifelse(paired, "- Paired", "- Unpaired")),,
+            sample_size = N_total,
+            n_test1 = n_test1,
+            n_test2 = n_test2
+          ),
+          class = "Two diagnostic tests"
+        )
+        
+      }
+      
+        ## test
+        sample_compare_ppvnpv(theta2 = 0.8, p = c(0.4,0,0.52,0.44,0.7,0,0.1,0.2), alpha = 0.05, beta = 0.2, delta = 1, gamma = 1.1, paired = TRUE, metric = "PPV", alternative = "two.sided")
+
+        
+        
+        
+
+    ##----- (3) compare the sensitivity/specificity at fixed fpr
+
+      sample_compare_sesp_fixed_fpr <- function(A_null, b_null, A1_alter, b1_alter, A2_alter, b2_alter, fpr, rN=NULL, rD=NULL, alpha=0.05, beta, paired=TRUE, R=1) {
+        
+        #--------------------------#
+        #  Sample size calculation when comparing test's sensitivity or specificity at fixed fpr 
+        
+        #  Args: 
+        #     A_null: AUC under the null hypothesis 
+        #     b_null: the ratio of standard deviations under the null hypothesis 
+        #     A1_alter: AUC of test 1 under the alternative hypothesis 
+        #     b1_alter: the ratio of standard deviations of test 1 under the alternative hypothesis 
+        #     A2_alter: AUC of test 2 under the alternative hypothesis 
+        #     b2_alter: the ratio of standard deviations of test 2 under the alternative hypothesis
+        #     rD: the correlation of the underlying bivariate binormal distribution for patients with the condition
+        #     rN: the correlation of the underlying bivariate binormal distribution for patients without the condition
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     paired: paired study design or unpaired study design, must be "True" or "False"
+        #     R: the ratio of patients with and without the condition
+        
+        #  Returns: 
+        #     sample size: (test1 with condition, test1 without condition, test2 with condition, test 2 without condition, total)
+        
+        #--------------------------#  
+        
+        
+        #  (1) ----- validate inputs 
+        if (!is.numeric(A_null) || A_null <= 0 ||A_null >= 1) {
+          stop("A_null must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(A1_alter) || A1_alter <= 0 ||A1_alter >= 1) {
+          stop("A1_alter must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(A2_alter) || A2_alter <= 0 ||A2_alter >= 1) {
+          stop("A2_alter must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b_null) || b_null <= 0) {
+          stop("b_null must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(b1_alter) || b1_alter <= 0) {
+          stop("b1_alter must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(b2_alter) || b2_alter <= 0) {
+          stop("b2_alter must be a positive numeric value.")
+        }
+        
+        if (!is.null(rD) || (!is.numeric(rD) || rD < -1 || rD > 1)) {
+          stop("rD must be a numeric value between -1 and 1.")
+        }
+        
+        if (!is.null(rN) || (!is.numeric(rN) || rN < -1 || rN > 1)) {
+          stop("rN must be a numeric value between -1 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(beta) || beta <= 0 || beta >= 1) {
+          stop("beta must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.logical(paired) || length(paired) != 1) {
+          stop("'paired' must be a single logical value (TRUE or FALSE).")
+        }
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        
+        #  (2) ----- calculation modules
+        
+        ## assign empirical correlation 
+        if(paired){
+          rN <- ifelse(is.null(NULL), 0.5, rN)
+          rD <- ifelse(is.null(NULL), 0.5, rD)
+            
+        } else {
+          r <- 0
+          rN <- rD <- r
+        }
+        
+        ## calcuate variance function 
+        a1_alter <- estimate_binorm_params(A1_alter, b1_alter)$a
+        a2_alter <- estimate_binorm_params(A2_alter, b2_alter)$a
+        
+        z1_alter <- a1_alter + b1_alter * qnorm(fpr)
+        z2_alter <- a2_alter + b2_alter * qnorm(fpr)
+        
+        V_theta <- function(A,b,e,R) {
+          
+          g <- qnorm(e)
+          a <-  
+            
+          V <- 1 + b^2/R + a^2/2 + g^2*(b^2)*(1+R)/(2*R)
+          
+          return(V)  
+        }
+          
+        C_delta_theta <- function(A1,A2,b1,b2,rD,rN,) {
+          
+          g <- qnorm(e)
+          a <- 
+          
+          C <- rD + (rN*b1*b2)/R + (rD^2*a1*a2)/2 + (g)^2*b1*b2*(rN^2+R*rD^2)/(2*R) + g*rD^2*(a1*b2+a2*b1)/2
+          
+          return(C)
+        }
+        
+            
+        V01 <- 1 + b_null^2 / R + A_null^2 / 2 + (qnorm(fpr))^2 * (b_null^2 * (1 + R)) / (2 * R)
+        V02 <- 1 + b_null^2 / R + a2_null^2 / 2 + (qnorm(fpr))^2 * (b_null^2 * (1 + R)) / (2 * R)
+        
+        VA1 <- 1 + b1_alter^2 / R + a1_alter^2 / 2 + (qnorm(fpr))^2 * (b1_alter^2 * (1+R)) / (2 * R)
+        VA2 <- 1 + b2_alter^2 / R + a2_alter^2 / 2 + (qnorm(e))^2 * (b2_alter^2 * (1 + R)) / (2 * R)
+        
+        delta<-abs(z1_alter-z2_alter)
+        
+        C0 <- rD+(rN*b1_null*b2_null)/R+(rD^2*a1_null*a2_null)/2+(qnorm(e))^2*b1_null*b2_null*(rN^2+R*rD^2)/(2*R)+qnorm(e)*rD^2*(a1_null*b2_null+a2_null*b1_null)/2
+        
+        CA <- rD+(rN*b1_alter*b2_alter)/R+(rD^2*a1_alter*a2_alter)/2+(qnorm(e))^2*b1_alter*b2_alter*(rN^2+R*rD^2)/(2*R)+qnorm(e)*rD^2*(a1_alter*b2_alter+a2_alter*b1_alter)/2
+        
+        
+        V0<-V01+V02-2*C0
+        VA<-VA1+VA2-2*CA
+        
+        
+        
+        
+        
+        
+        ## calculate sample size 
+        
+        
+        
+        
+        
+        
+
+        
+        
+        #  (3) ----- structured outputs
+       
+        ## method reference
+        method <- "Sample size method for comparing Tests' sensitivity/specificity at fixed fpr by Obuchowski and 
+McClish (1997)"
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1-beta),
+            method = paste0(method, ifelse(paired,"- Paired","- Unpaired")),
+            sample_size = N_total,
+            n_test1_with_conditon = n_test1_with_conditon,
+            n_test1_without_conditon = n_test1_without_conditon,
+            n_test2_with_conditon = n_test2_with_conditon,
+            n_test2_without_conditon = n_test2_without_conditon,
+          ),
+          class = "Two diagnostic tests")
+        
+        
+      }
+
+```
+
+##### (4) Compare AUC (full and partial)
+
+```{r}
+
+    ##----- (1) compare the full AUC of two tests
+      sample_compare_full_roc <- function(A_null, b_null, A1_alter, b1_alter=1, A2_alter, b2_alter=1, r, rN, rD, alpha=0.05, beta, R=1, paired=FALSE, dist="any") {
+        
+        #--------------------------#
+        #  Sample size calculation when comparing test's full AUC 
+        
+        #  Args: 
+        #     A_null: AUC under the null hypothesis 
+        #     b_null: the ratio of standard deviations under the null hypothesis 
+        #     A1_alter: AUC of test 1 under the alternative hypothesis 
+        #     b1_alter: the ratio of standard deviations of test 1 under the alternative hypothesis 
+        #     A2_alter: AUC of test 2 under the alternative hypothesis 
+        #     b2_alter: the ratio of standard deviations of test 2 under the alternative hypothesis
+        #     rD: the correlation of the underlying bivariate binormal distribution for patients with the condition
+        #     rN: the correlation of the underlying bivariate binormal distribution for patients without the condition
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     paired: paired study design or unpaired study design, must be "True" or "False"
+        #     R: the ratio of patients with and without the condition
+        #     dist: 
+        
+        #  Returns: 
+        #     sample size: (test1 with condition, test1 without condition, test2 with condition, test 2 without condition, total)
+        
+        #--------------------------#
+        
+        
+        #  (1) ----- validate inputs 
+        if (!is.numeric(A_null) || A_null <= 0 ||A_null >= 1) {
+          stop("A_null must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(A1_alter) || A1_alter <= 0 ||A1_alter >= 1) {
+          stop("A1_alter must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(A2_alter) || A2_alter <= 0 ||A2_alter >= 1) {
+          stop("A2_alter must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(b_null) || b_null <= 0) {
+          stop("b_null must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(b1_alter) || b1_alter <= 0) {
+          stop("b1_alter must be a positive numeric value.")
+        }
+        
+        if (!is.numeric(b2_alter) || b2_alter <= 0) {
+          stop("b2_alter must be a positive numeric value.")
+        }
+        
+        if (!is.null(rD) || (!is.numeric(rD) || rD < -1 || rD > 1)) {
+          stop("rD must be a numeric value between -1 and 1.")
+        }
+        
+        if (!is.null(rN) || (!is.numeric(rN) || rN < -1 || rN > 1)) {
+          stop("rN must be a numeric value between -1 and 1.")
+        }
+        
+        if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) {
+          stop("alpha must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.numeric(beta) || beta <= 0 || beta >= 1) {
+          stop("beta must be a numeric value between 0 and 1.")
+        }
+        
+        if (!is.logical(paired) || length(paired) != 1) {
+          stop("'paired' must be a single logical value (TRUE or FALSE).")
+        }
+        
+        if (!is.numeric(R) || R <= 0) {
+          stop("R must be a positive numeric value.")
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        #  (2) ----- calculation modules
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        #  (3) ----- structured outputs
+        
+        message("null hypothesis: A1 = A2 = ", A1)
+        
+        # Define test type for clarity
+        test_type = "multi_diagnostic"
+        
+        # Define correlation coefficients for paired and unpaired designs
+        if(paired){
+          r <- 0.5
+          rN <- rD
+          
+        } else {
+           r <- 0
+           rN <- rD <- r
+        }
+        
+        # Variance calculation for 'any' distribution
+        if(dist == "any") { 
+         
+          V0_delta_A <- 2 * A1 * (1-A1) - 2 * r * sqrt(A1^2 * (1-A1)^2)
+          VA_delta_A <- A1 * (1 - A1) + A2 * (1 - A2) - 2 * r * sqrt(A1 * (1-A1) * A2 * (1-A2))
+          var_function <- c(V0_delta_A,VA_delta_A)
+        
+          method <- "Sample size method for comparing Tests' AUC  by Beam (1992)"
+          
+        } else if(dist == "binorm") {
+          
+          a1 <- estimate_binorm_params(A1,b1)$a 
+          a2 <- estimate_binorm_params(A2,b2)$a 
+          
+          v0_A1 <- (0.0099) * exp(-a1^2 / 2) * ((5 * a1^2 + 8) + (a1^2 + 8) / R)
+          v0_A2 <- v0_A1
+          vA_A1 <- (0.0099) * exp(-a1^2 / 2) * ((5 * a1^2 + 8) + (a1^2+ 8) / R)
+          vA_A2 <- (0.0099) * exp(-a2^2 / 2) * ((5 * a2^2 + 8) + (a2^2 + 8) / R)
+          
+          s01 <- exp(-(a1^2+a1^2) / 4) / 12.5664 * (rD + rN / R + rD^2* a1 * a1 / 2)
+          s02 <- exp(-(a1^2+a1^2) / 4) / 50.2655 * a1 * a1 * (rN^2 + R* rD^2) / 2 / R
+          s03 <- -exp(-(a1^2+a1^2) / 4) / 25.1327 * rD^2 * a1 * a1
+          C0_delta_A <- ifelse(paired, s01+s02+s03, 0)
+          
+          sa1 <- exp(-(a1^2+a2^2) / 4) / 12.5664 * (rD + rN / R + rD^2 * a1 * a2 / 2)
+          sa2 <- exp(-(a1^2+a2^2) / 4) / 50.2655 * a1 * a2 * (rN^2 + R * rD^2) / 2 / R
+          sa3 <- -exp(-(a1^2+a2^2) / 4) / 25.1327 * rD^2 * a1 * a2
+          CA_delta_A <- ifelse(paired, sa1+sa2+sa3, 0)
+          
+          V0_delta_A <- v0_A1 + v0_A2 - 2 * C0_delta_A
+          VA_delta_A <- vA_A1 + vA_A2 - 2 * CA_delta_A
+          var_function <- c(V0_delta_A, VA_delta_A)
+            
+          method <- "Sample size method for comparing Tests' AUC by Obuchowski and McClish (1992)"
+        } 
+        
+        delta1 <- abs(A1 - A2)
+        
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = delta1, 
+          test_type = test_type
+          )
+        
+        n_test1_with_conditon <- ceiling(n/2)
+        n_test1_without_conditon <- ceiling(R*n/2)
+        n_test2_with_conditon <- ceiling(n/2)
+        n_test2_without_conditon <- ceiling(R*n/2)
+        
+        N_total <- 2 * (n_test1_with_conditon + n_test1_without_conditon)
+        
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1-beta),
+            method = paste0(method, ifelse(paired,"- Paired","- Unpaired")),
+            sample_size = N_total,
+            n_test1_with_conditon = n_test1_with_conditon,
+            n_test1_without_conditon = n_test1_without_conditon,
+            n_test2_with_conditon = n_test2_with_conditon,
+            n_test2_without_conditon = n_test2_without_conditon,
+          ),
+          class = "Two diagnostic tests")
+      }
+    
+    
+    ## test
+    sample_cmp_full_roc(A1 = 0.8, A2 = 0.9, alpha = 0.05, beta = 0.2, R = 1, paired = FALSE, dist = "any")
+    sample_cmp_full_roc(A1 = 0.8, A2 = 0.9, alpha = 0.05, beta = 0.2, R = 1, paired = FALSE, dist = "binorm")
+    
+    sample_cmp_full_roc(A1 = 0.8, A2 = 0.9, alpha = 0.05, beta = 0.2, R = 1, paired = TRUE, dist = "any")
+    sample_cmp_full_roc(A1 = 0.8, A2 = 0.9, alpha = 0.05, beta = 0.2, R = 1, paired = TRUE, dist = "binorm") # the precision of a 
+
+
+    ##----- (2) compare the partial test
+      sample_cmp_partial_roc <- function(e1, e2, A1, A2, b1 = 1, b2 = 1, alpha, beta, R = 1, paired = FALSE) {
+       
+        #--------------------------#
+        #  Sample size calculation when comparing test's full AUC 
+        
+        #  Args: 
+        #     A_null: AUC under the null hypothesis 
+        #     b_null: the ratio of standard deviations under the null hypothesis 
+        #     A1_alter: AUC of test 1 under the alternative hypothesis 
+        #     b1_alter: the ratio of standard deviations of test 1 under the alternative hypothesis 
+        #     A2_alter: AUC of test 2 under the alternative hypothesis 
+        #     b2_alter: the ratio of standard deviations of test 2 under the alternative hypothesis
+        #     rD: the correlation of the underlying bivariate binormal distribution for patients with the condition
+        #     rN: the correlation of the underlying bivariate binormal distribution for patients without the condition
+        #     alpha: significant level 
+        #     beta: type II error rate (1 - power) 
+        #     paired: paired study design or unpaired study design, must be "True" or "False"
+        #     R: the ratio of patients with and without the condition
+        #     dist: 
+        
+        #  Returns: 
+        #     sample size: (test1 with condition, test1 without condition, test2 with condition, test 2 without condition, total)
+        
+        
+        
+        
+        
+        #  (1) ----- validate inputs 
+        
+        
+        
+        #  (2) ----- calculation modules
+        
+        
+        #  (3) ----- structured outputs
+        
+        
+           
+        message("null hypothesis: A1 = A2 = ", A1, " when fdr is between (",e1,",",e2,")")
+        
+        # Define test type for clarity
+        test_type = "multi_diagnostic"
+        
+        # Define the correlation
+        if(paired){
+          r <- 0.5
+          rN <- rD <- r
+        
+        } else if(!paired) {
+          r <- 0
+          rN <- rD <- r
+        }
+        
+        # define function f and g  
+        f <- function(a,b,e1,e2){
+          
+          e_prime <- (qnorm(c(e1,e2)) + a * b / (1 + b^2 )) * sqrt(1 + b^2)
+          
+          expr1 <- exp(-a^2 / 2 / (1 + b^2)) 
+          expr2 <- 1 + b^2
+          expr3 <- pnorm(e_prime[2]) - pnorm(e_prime[1])
+          
+          f_value <- expr1 * (2 * pi * expr2) ^ (-1/2) * expr3
+          return(f_value)
+        }
+        
+        g <- function(a,b,e1,e2){
+          e_prime <- (qnorm(c(e1,e2)) + a * b / (1 + b^2)) * sqrt(1 + b^2)
+          e_double_prime <- (e_prime)^2 / 2 
+          
+          expr1 <- exp(-a^2 / 2 / (1 + b^2)) 
+          expr2 <- 1 + b^2
+          expr3 <- pnorm(e_prime[2]) - pnorm(e_prime[1])
+          expr4 <- exp(-e_double_prime[1]) - exp(-e_double_prime[2])
+          
+          g_value <- expr1 * (2 * pi * expr2)^(-1) * expr4 - a * b* expr1 * (2 * pi * expr2^3)^(-1/2) * expr3
+          return(g_value)
+        }
+        
+        a1 <- estimate_binorm_params(A1, b1)$a
+        a2 <- estimate_binorm_params(A2, b2)$a
+        f1 <- f(a1, b1, e1, e2)
+        g1 <- g(a1, b1, e1, e2)
+        f2 <- f(a2, b2, e1, e2)
+        g2 <- g(a2, b2, e1, e2) 
+        
+        # Variance calculations
+        V0_A1 <- f1^2 * (1 + b1^2 / R + a1^2 / 2) + g1^2 * (b1^2 * (1+R) / 2 / R)
+        V0_A2 <- f1^2 * (1 + b1^2 / R + a1^2 / 2) + g1^2 * (b1^2 * (1+R)/ 2 / R)
+        C0_delta_A <- f1 * f1 * (rD + rN * b1 * b1 / R + rD^2 * a1 * a1 / 2) + g1 * g1 * b1 * b1 * (rN^2 + R * rD^2) / 2 / R + f1 * g1 * rD^2 * a1 * b1 / 2 + f1 * g1 * rD^2 * a1 * b1  
+        V0_delta_A <- V0_A1 + V0_A2 - 2 * C0_delta_A
+        
+        VA_A1 <- f1^2 *(1 + b1^2/R + a1^2 /2) + g1^2 * (b1^2 * (1 + R)/2 /R)
+        VA_A2 <- f2^2 *(1 + b2^2/R + a2^2 /2) + g2^2 * (b2^2 * (1 + R)/2 /R)
+        CA_delta_A <- f1 * f2 * (rD + rN * b1 * b2 /R + rD^2 * a1 * a2 /2) + g1 * g2 * b1 * b2 * (rN^2 + R * rD^2) /2 /R + f1 * g2 * rD^2 * a1 * b2/2 + f2 * g1 * rD^2 * a2 * b1   
+        VA_delta_A <- VA_A1 + VA_A2 - 2 * CA_delta_A
+        
+        var_function <- c(V0_delta_A,VA_delta_A)
+        
+        # Delta calculation
+        SA1 <- function(x){pnorm(a1 + b1 * qnorm(x))}
+        SA2 <- function(x){pnorm(a2 + b2 * qnorm(x))}
+        delta1 <- integrate(SA1,e1,e2)$value - integrate(SA2,e1,e2)$value
+        
+         method <- "Sample size method for comparing tests' patial AUC by Obuchowski and McClish (1997)"
+         
+        n <- estimate_diagnostic_sample_size(
+          var_function = var_function, 
+          alpha = alpha, 
+          beta = beta, 
+          delta = delta1, 
+          test_type = test_type
+          )
+        
+        n_test1_with_condition <- ceiling(n/2)
+        n_test1_without_condition <- ceiling(n/2*R) 
+        n_test2_with_condition <- ceiling(n/2)
+        n_test2_without_condition <- ceiling(n/2*R)
+        
+        N_total <- 2*(n_test1_with_condition+n_test1_without_condition)
+          
+        structure(
+          list(
+            alpha = alpha,
+            power = ifelse(is.null(beta),"NULL",1 - beta),
+            method = method,
+            design = ifelse(paired,"paired design","unpaired design"),
+            sample_size = N_total,
+            n_test1_with_condition = n_test1_with_condition,
+            n_test1_without_condition = n_test1_without_condition,
+            n_test2_with_condition = n_test2_with_condition,
+            n_test2_without_condition = n_test2_without_condition
+          ),
+          class = "Two diagnostic tests")
+        
+      }
+    
+        sample.cmp.partial.roc(e1 = 0, e2 = 0.2, A1 = 0.8, A2 = 0.9, b1 = 1, b2 = 1, alpha = 0.05, beta = 0.2, paired = FALSE)
+        sample.cmp.partial.roc(e1 = 0, e2 = 0.2, A1 = 0.8, A2 = 0.9, b1 = 1, b2 = 1, alpha = 0.05, beta = 0.2, paired = TRUE)
+```
+
+##### (5) Assess inferiority
+
+```{r}
+    ##----- (1) compare the sensitivity/specificity with standard test
+    sample_infer_sesp <- function(theta_s, theta_e, prob_t1pos_give_t2pos = NULL, delta_m, alpha, beta, R = 1, paired = TRUE) {
+      
+      if(!paired) {
+        print(paste0("P(T1=1|T2=1)=", theta_s,", when using an unpaired design"))
+        Prob = theta_s
+      }
+      message(paste0("null_hypothesis: theta_s - theta_e ≥ ", delta_m))
+      
+      test_type = "inferiority"
+    
+      # calculate variance function
+      fi <- theta_s + theta_e - 2*theta_e*prob_t1pos_give_t2pos
+      delta1 <- theta_s - theta_e
+      V0_delta_theta <- fi
+      VA_delta_theta <- V0_delta_theta - delta1^2
+      
+      delta <- abs(theta_s - theta_e - delta_m)
+      
+      n <- estimate_diagnostic_sample_size(
+        var_function = VA_delta_theta, 
+        alpha = alpha, 
+        beta = beta, 
+        delta = delta, 
+        test_type = test_type)
+      
+      method <- "Sample size method for inferiority tests by Blackwelder (1982)"
+      n_with_condition <- ceiling(n)
+      n_without_condition <- ceiling(R*n)
+      N_total <- n_with_condition + n_without_condition
+      
+      structure(
+        list(
+          alpha = alpha,
+          power = ifelse(is.null(beta),"NULL",1-beta),
+          method = method,
+          design = ifelse(paired,"paired design","unpaired design"),
+          sample_size = N_total,
+          n_with_condition = n_with_condition,
+          n_without_condition = n_without_condition
+        ),
+        class = "Two diagnostic tests") 
+      
+    }
+    
+    
+    ##----- (2) compare the auc with standard test
+    sample_infer_auc <- function(As, Ae, bs = 1, be = 1, delta_m, alpha, beta, R = 1, paired = TRUE) {
+      
+      message(paste0("null_hypothesis: A_s - A_e ≥ ", delta_m))
+      
+      test_type = "inferiority"
+      
+      # calculate variance function
+      if (dist == "any") {
+        VA_delta_A <- As * (1 - As) + Ae * (1 - Ae) - 2 * r * sqrt(As * (1 - As) * Ae * (1 - Ae))
+        var_function <- VA_delta_A
+    
+      } else if (dist == "binorm") {
+    
+        as <- estimate_binorm_params(As, bs)$a
+        ae <- estimate_binorm_params(Ae, be)$a
+    
+        vA_As <- 0.0099 * exp(-as^2 / 2) * ((5 * as^2 + 8) + (as^2 + 8) / R)
+        vA_Ae <- 0.0099 * exp(-ae^2 / 2) * ((5 * ae^2 + 8) + (ae^2 + 8) / R)
+        s1 <- exp(-(as^2 + ae^2) / 4) / 12.5664 * (rD + rN / R + rD^2 * a1 * a2 / 2)
+        s2 <- exp(-(as^2 + ae^2) / 4) / 50.2655 * as * ae * (rN^2 + R * rD^2) / (2 * R)
+        s3 <- -exp(-(as^2 + ae^2) / 4) / 25.1327 * rD^2 * as * ae
+        CA_delta_A <- ifelse(paired, s1 + s2 + s3, 0) 
+        VA_delta_A <- vA_As + vA_Ae - 2 * CA_delta_A
+      }
+      
+      delta <- abs(A_s - A_e - delta_m)
+      
+      n <- estimate_diagnostic_sample_size(
+        var_function = VA_delta_A, 
+        alpha = alpha, 
+        beta = beta, 
+        delta = delta, 
+        test_type = test_type)
+      
+      method <- "Sample size method for inferiority tests by Blackwelder (1982)"
+      n_with_condition <- ceiling(n)
+      n_without_condition <- ceiling(R*n)
+      N_total <- n_with_condition + n_without_condition
+      
+      structure(
+        list(
+          alpha = alpha,
+          power = ifelse(is.null(beta),"NULL",1-beta),
+          method = method,
+          design = ifelse(paired,"paired design","unpaired design"),
+          sample_size = N_total,
+          n_with_condition = n_with_condition,
+          n_without_condition = n_without_condition
+        ),
+        class = "Two diagnostic tests") 
+      
+    }
+    
+    ##----- (3) compare the TPR/FPR with standard test
+    sample_infer_TPRFPR <- function(theta2, theta, gamma, alpha, beta, delta1) {
+      
+      n_pro<-ceiling((qnorm(beta,lower.tail=FALSE)+qnorm(sqrt(1-alpha)))^2/log(gamma/delta1)^2*((gamma+1)*TPR2-2*TPPR)/(gamma*TPR2))
+      n_retro<-ceiling((qnorm(sqrt(1-beta))+qnorm(sqrt(1-alpha)))^2/log(gamma/delta1)^2*((gamma+1)*TPR2-2*TPPR)/(gamma*TPR2))
+      result<-list(n_pro=NULL,n_retro=NULL)
+      result$n_pro<-n_pro
+      result$n_retro<-n_retro
+      return(result)
+    
+    }
+  
+
+
+```
+
+##### (6) Access Equivalency
+
+```{r}
+
+```
