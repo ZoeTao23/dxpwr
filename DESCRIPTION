@@ -1,0 +1,26 @@
+Package: dxpwr
+Type: Package
+Title: Sample Size Calculator for Diagnostic Accuracy Studies
+Version: 0.1.0
+Authors@R: 
+    person(given = "Xinya", 
+           family = "Tao", 
+           role = c("aut", "cre"), 
+           email = "xt2113@nyu.edu","xinya.tao.cqbdri.pku.edu.cn")
+Description: Provides functions for computing the minimum number of necessary sample size required for common diagnostic accuracy tests to insure clinical significant result, mainly based on the methodology proposed in the Chapter 6 in Statistical Methods in Diagnostic Tests by Xiaohua Zhou et al. (2011). This package facilitates diagnostic study design optimization in accuracy and estimation comparison.
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+Depends: 
+    R (>= 4.4.1)
+Imports: 
+    ggplot2,
+    dplyr,
+    stats,
+    methods
+Suggests: 
+    testthat (>= 3.0.0)，
+    knitr,
+    rmarkdown
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
