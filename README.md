@@ -1,2 +1,2 @@
-# Sample-size-calculator
-Sample size calculator for diagnostic test and statistical test
+# dplyr
+Sample size calculator for diagnostic accuracy studies
