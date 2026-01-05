@@ -18,6 +18,7 @@ A companion web‑based calculator offers the main functionality through an intu
 | Comparative – difference | Demonstrate a difference in accuracy between two tests | Hypothesis test for difference in proportions or AUCs |
 | Comparative – equivalence | Demonstrate equivalent accuracy between two tests | Two one‑sided tests (TOST) for equivalence margins |
 | Comparative – non‑inferiority | Demonstrate that a new test is not worse than a reference | One‑sided test with a pre‑specified non‑inferiority margin |
+
 Both **paired** (same participants receive both tests) and **unpaired** (different participants for each test) designs are supported.
 
 ## 📦 Installation
