@@ -11,7 +11,7 @@ A companion web‑based calculator offers the main functionality through an intu
 5.Dual interface – Use the R package for programmatic, reproducible workflows, or the web app for interactive, guided planning.
 
 🧪 Supported Designs at a Glance
-
+!(figure_01.png)
 
 
 
