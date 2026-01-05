@@ -2,9 +2,8 @@
 
 ## 📋 Overview
 `dxpwr` is an R package designed to provide a structured, transparent framework for sample size determination in diagnostic accuracy studies. It supports a wide range of study designs—from single‑test evaluation to comparative studies (difference‑based, equivalence, non‑inferiority)—with built‑in adjustments for practical factors like prospective design and clustered data.
-
 A companion web‑based calculator offers the main functionality through an intuitive, point‑and‑click interface, making rigorous sample‑size planning accessible to users without programming experience.
-
+![Supported Designs Overview](figure_01.png)
 ## ✨ Key Features
 1. **Guided, transparent workflow** – Maps your study question (single‑test or comparative, paired or unpaired) directly to the appropriate statistical estimator.
 2. **Comprehensive design support** – Covers sensitivity, specificity, AUC, partial AUC, sensitivity at a fixed false‑positive rate, specificity at a fixed false‑negative rate, and more.
@@ -13,8 +12,12 @@ A companion web‑based calculator offers the main functionality through an intu
 5. **Dual interface** – Use the R package for programmatic, reproducible workflows, or the web app for interactive, guided planning.
 
 🧪 Supported Designs at a Glance
-![Supported Designs Overview](figure_01.png)
-*Figure 1: Overview of supported study designs in dxpwr*
+| Design Type | Primary Objective | Statistical Approach |
+|-------------|-------------------|----------------------|
+| Single‑test evaluation | Estimate accuracy (sensitivity, specificity, AUC, etc.) | Confidence‑interval width for a single proportion or AUC |
+| Comparative – difference | Demonstrate a difference in accuracy between two tests | Hypothesis test for difference in proportions or AUCs |
+| Comparative – equivalence | Demonstrate equivalent accuracy between two tests | Two one‑sided tests (TOST) for equivalence margins |
+| Comparative – non‑inferiority | Demonstrate that a new test is not worse than a reference | One‑sided test with a pre‑specified non‑inferiority margin |
 Both **paired** (same participants receive both tests) and **unpaired** (different participants for each test) designs are supported.
 
 ## 📦 Installation
