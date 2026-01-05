@@ -11,7 +11,7 @@ A companion web‑based calculator offers the main functionality through an intu
 4. **Fully reproducible reporting** – For every calculation, `dxpwr` generates a detailed report that includes the statistical formula used, a breakdown of each input parameter, and a step‑by‑step computational trace.
 5. **Dual interface** – Use the R package for programmatic, reproducible workflows, or the web app for interactive, guided planning.
 
-🧪 Supported Designs at a Glance
+## 🧪 Supported Designs 
 | Design Type | Primary Objective | Statistical Approach |
 |-------------|-------------------|----------------------|
 | Single‑test evaluation | Estimate accuracy (sensitivity, specificity, AUC, etc.) | Confidence‑interval width for a single proportion or AUC |
