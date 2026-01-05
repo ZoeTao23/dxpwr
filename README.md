@@ -3,7 +3,7 @@
 ## 📋 Overview
 `dxpwr` is an R package designed to provide a structured, transparent framework for sample size determination in diagnostic accuracy studies. It supports a wide range of study designs—from single‑test evaluation to comparative studies (difference‑based, equivalence, non‑inferiority)—with built‑in adjustments for practical factors like prospective design and clustered data.
 A companion web‑based calculator offers the main functionality through an intuitive, point‑and‑click interface, making rigorous sample‑size planning accessible to users without programming experience.
-![Supported Designs Overview](figure_01.png)
+![Supported Designs Overview](workflow.png)
 ## ✨ Key Features
 1. **Guided, transparent workflow** – Maps your study question (single‑test or comparative, paired or unpaired) directly to the appropriate statistical estimator.
 2. **Comprehensive design support** – Covers sensitivity, specificity, AUC, partial AUC, sensitivity at a fixed false‑positive rate, specificity at a fixed false‑negative rate, and more.
