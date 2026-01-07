@@ -18,8 +18,8 @@
 #'   - `parameters` (list): Input parameters.
 #'   - `html_report` (html): Sample size calculation report.
 #' @examples
-#' lapply(X=c("any", "exp", "binorm", "obs_binorm"), FUN=function(dist) sample_estimate_full_ROC(A=0.8, alpha=0.05, beta=0.2, L=0.1, R=1, dist=dist))
-sample_estimate_full_ROC <- function(A, b=1, alpha=0.05, beta=NULL, L, R=1, dist="any") {
+#' lapply(X=c("any", "exp", "binorm", "obs_binorm"), FUN=function(dist) sample_estimate_full_auc(A=0.8, alpha=0.05, beta=0.2, L=0.1, R=1, dist=dist))
+sample_estimate_full_auc <- function(A, b=1, alpha=0.05, beta=NULL, L, R=1, dist="any") {
 
 
   #  (1) ----- validate inputs
@@ -945,4 +945,5 @@ sample_estimate_full_ROC <- function(A, b=1, alpha=0.05, beta=NULL, L, R=1, dist
   )
 
 }
+
 
