@@ -14,7 +14,6 @@
 #'   \item data (list) - Randomly generated simulation data (scores, labels).
 #'   \item call (character) - The original function call.
 #' }
-#' @importFrom ggplot2 pROC
 #' @examples
 #' p <- plot_binorm_ROC(a=1.19, b=1, n_sample=2000, ci=0.95, seed=1)
 #' print(p)

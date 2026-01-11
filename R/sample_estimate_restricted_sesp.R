@@ -7,12 +7,12 @@
 #'   - `"spec"`: Specificity at the fixed FNR.
 #' @param A (numeric): Expected area under the ROC curve.
 #' @param b (numeric): Ratio of the standard deviations of the distributions of test results for patients without versus with the condition, σ_without/σ_with (default: 1).
-#' @param e (Numeric): For "sens" provide false positive rate value, and for "spec" provide false negative rate value.
-#' @param alpha (Numeric): Significance level (default: 0.05).
-#' @param beta (Numeric): Type II error rate (default: NULL).
-#' @param L (Numeric): The desired length of one-half of the (1-α)×100% confidence interval for sensitivity/specificity.
-#' @param R (Numeric): Ratio of patients with and without the condition (default: 1).
-#' @param dist (Character): The assumption for choosing the variance function (default: "binorm"):
+#' @param e (numeric): For "sens" provide false positive rate value, and for "spec" provide false negative rate value.
+#' @param alpha (numeric): Significance level (default: 0.05).
+#' @param beta (numeric): Type II error rate (default: NULL).
+#' @param L (numeric): The desired length of one-half of the (1-α)×100% confidence interval for sensitivity/specificity.
+#' @param R (numeric): Ratio of patients without to with the condition (default: 1).
+#' @param dist (character): The assumption for choosing the variance function (default: "binorm"):
 #'   - `"binorm"`: Assume that the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution.
 #'   - `"obs_binorm"`: Assume that the observed test results are on a truly continuous scale and they follow a binormal distribution (or can be transformed to a binormal distribution).
 #' @return An object of class "diag_sample_size_html" containing:
@@ -193,7 +193,7 @@ sample_estimate_restricted_sesp <- function(metric, A, b=1, e, alpha=0.05, beta=
                       "1 - Type I error rate",
                       "1 - Type II error rate",
                       "Half-width of CI",
-                      "Ratio of patients with and without the condition"
+                      "Ratio of patients without to with the condition"
         )
       ),
 

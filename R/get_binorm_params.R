@@ -19,8 +19,8 @@
 get_binorm_params <- function(AUC, SD_Ratio){
 
   #  (1) ----- validate inputs
-  if (!is.numeric(AUC) || length(AUC) != 1 || AUC <= 0.5 || AUC >= 1) {
-    stop("'AUC' must be a single numeric value in (0.5, 1).")
+  if (!is.numeric(AUC) || length(AUC) != 1 || AUC < 0.5 || AUC > 1) {
+    stop("'AUC' must be a single numeric value in [0.5, 1].")
   }
 
   if (!is.numeric(SD_Ratio) || length(SD_Ratio) != 1 || SD_Ratio <= 0) {

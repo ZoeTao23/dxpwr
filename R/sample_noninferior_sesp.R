@@ -1,36 +1,38 @@
 #' Sample Size Calculator for Diagnostic Tests
 #'
-#' Calculate the required sample size for comparing sensitivity/specificity between two diagnostic tests.
+#' Calculate the required sample size for testing whether the sensitivity/specificity of a new experimental test (test E) is non-inferior to an established standard test (test E).
 #'
-#' @param theta1 (numeric). The expected sensitivity or specificity of test 1.
-#' @param theta2 (numeric). The expected sensitivity or specificity of test 2.
-#' @param prob_t1pos_give_t2pos (numeric). Conditional probability of test 1 being positive when test 2 being positive.
-#' @param alpha (numeric). Significance level (default: 0.05).
-#' @param beta (numeric). Type II error rate.
-#' @param paired (logical). Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
+#' @param theta_S (numeric): The true sensitivity (or specificity) of an established standard test (test S).
+#' @param theta_E (numeric): The true sensitivity (or specificity) of a new experimental test (test E).
+#' @param p_ts_pos_given_te_pos (numeric): Conditional probability of the standard test being positive when experimental test being positive.
+#' @param alpha (numeric): Significance level (default: 0.05).
+#' @param beta (numeric): Type II error rate.
+#' @param delta (numeric): The smallest difference in accuracy which would not be considered non-inferior.
+#' @param R (numeric): Ratio of patients without to with the condition (default: 1).
+#' @param paired (logical): Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
 #' @return An object of class "diag_sample_size_html" containing:
 #'   - `sample_size` (list): Required sample size.
 #'   - `parameters` (list): Input parameters.
 #'   - `html_report` (html): Sample size calculation report.
 #' @examples
-#' n <- sample_compare_sesp(theta1=0.8, theta2=0.7, prob_t1pos_give_t2pos=0, alpha=0.05, beta=0.2, paired=FALSE)
+#' n <- sample_non_inferior_sesp(theta_S=0.9, theta_E=0.89, p_ts_pos_given_te_pos=0.5, delta=0.1, alpha=0.05, beta=0.2, R=1, paired=TRUE)
 #' print(n)
 #' @export
-sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alpha=0.05, beta, paired=FALSE) {
+sample_non_inferior_sesp <- function(theta_S, theta_E, p_ts_pos_given_te_pos=NULL, delta, alpha=0.05, beta, R=1, paired=TRUE) {
 
 
   #  (1) ----- validate inputs
 
-  if (!is.numeric(theta1) || length(theta1) != 1 || theta1 <= 0 || theta1 >= 1) {
-    stop("'theta1' must be a single numeric value in (0, 1).")
+  if (!is.numeric(theta_S) || length(theta_S) != 1 || theta_S <= 0 ||theta_S >= 1) {
+    stop("'theta_S' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(theta2) || length(theta2) != 1 || theta2 <= 0 || theta2 >= 1) {
-    stop("'theta2' must be a single numeric value in (0, 1).")
+  if (!is.numeric(theta_E) || length(theta_E) != 1 || theta_E <= 0 || theta_E >= 1) {
+    stop("'theta_E' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(prob_t1pos_give_t2pos) || length(prob_t1pos_give_t2pos) != 1 || prob_t1pos_give_t2pos < 0 || prob_t1pos_give_t2pos > 1) {
-    stop("'prob_t1pos_give_t2pos' must be a single numeric value in [0, 1].")
+  if (!is.numeric(p_ts_pos_given_te_pos) || length(p_ts_pos_given_te_pos) != 1 ||  p_ts_pos_given_te_pos < 0 || p_ts_pos_given_te_pos > 1) {
+    stop("'p_ts_pos_given_te_pos' must be a single numeric value in [0, 1].")
   }
 
   if (!is.numeric(alpha) || length(alpha) != 1 || alpha <= 0 || alpha >= 1) {
@@ -41,35 +43,33 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
     stop("'beta' must be a single numeric value in (0, 1).")
   }
 
+  if (!is.numeric(delta) || length(delta) != 1 || delta < 0 || delta > 1) {
+    stop("'delta' must be a single numeric value in [0, 1].")
+  }
+
   if (!is.logical(paired) || length(paired) != 1) {
     stop("'paired' must be a single logical value TRUE or FALSE.")
   }
 
+  if (!is.numeric(R) || length(R) != 1 || R <= 0) {
+    stop("'R' must be a single positive numeric value.")
+  }
 
   #  (2) -----  calculation modules
 
-  message("Null hypothesis: θ1 = θ2")
-  message("Alternative hypothesis: θ1 ≠ θ2")
 
-  ## validate P(T1=1|T2=1)
-  if(!paired) {
-
-    prob_t1pos_give_t2pos = theta1
-    message("For unpaired design, P(T1=1|T2=1)=P(T1=1)=θ1")
-
-  } else{
-
-    message("For paired design, P(T1=1|T2=1)=1 means a perfect correlation between the test results; P(T1=1|T2=1)=θ1 means a zero correlation between the test results")
-  }
+  message(paste0("Null hypothesis: (θs - θe) ≥ ", delta))
+  message(paste0("Alternative hypothesis: (θs - θe) < ", delta))
+  cat("Note: For non-inferiority test, paired design is strongly recommended")
 
   ## calculate variance function
-  fi <- theta1 + theta2 - 2 * theta2 * prob_t1pos_give_t2pos
-  delta1 <- theta1 - theta2
+  V0_delta_theta <- theta_S + theta_E - 2 * theta_E * p_ts_pos_given_te_pos
+  VA_delta_theta <- V0_delta_theta - (theta_S - theta_E)^2
 
-  V0_delta_theta <- fi
-  VA_delta_theta <- fi - delta1^2
+  var_function <- VA_delta_theta
 
-  var_function <- c(V0_delta_theta, VA_delta_theta)
+  ## calculate delta
+  delta1 <- abs(theta_S - theta_E - delta)
 
   ## calculate sample size
   N <- get_diag_sample(
@@ -77,24 +77,22 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
     alpha = alpha,
     beta = beta,
     delta = delta1,
-    test_type = "two_diagnostic"
-  )
+    test_type = "non_inferiority")
 
   ## calculate number of patients for each test
-  if(paired){
-
-    n_test1 <- n_test2 <- ceiling(N)
-    n_total <- n_test1
+  if (paired) {
+    n_with_condition <- ceiling(N)
+    n_without_condition <- ceiling(R*N)
+    n_total <- n_with_condition + n_without_condition
 
   } else {
-
-    n_test1 <- n_test2 <- ceiling(N)
-    n_total <- n_test1 + n_test2
+    n_testS_with_condition <- n_testE_with_condition <- ceiling(N)
+    n_testS_without_condition <- n_testE_without_condition <- ceiling(R*N)
+    n_total <- 2*(n_testS_with_condition + n_testS_without_condition)
   }
 
 
   #  (3) ----- structured outputs
-
   html_report <- htmltools::tags$div(
     class = "clinical-report",
     style = "font-family: Arial; max-width: 800px; margin: auto;",
@@ -115,10 +113,10 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
       ## 1.Objective
       htmltools::tags$p(
         htmltools::tags$strong("Objective:"),
-        "To compare the ",
-        htmltools::tags$strong(style = paste0("color:", ifelse(theta1 > 0.5, "#E74C3C", "#27AE60"), ";"),"sensitivity"), "or",
-        htmltools::tags$strong(style = paste0("color:", ifelse(theta1 > 0.5, "#E74C3C", "#27AE60"), ";"),"specificity"),
-        "between two diagnostic tests"
+        "To testing whether the ",
+        htmltools::tags$strong(style = paste0("color:", ifelse(theta_E > 0.5, "#E74C3C", "#27AE60"), ";"),"sensitivity"), " or ",
+        htmltools::tags$strong(style = paste0("color:", ifelse(theta_E > 0.5, "#E74C3C", "#27AE60"), ";"),"specificity"),
+        " of a new experimental test is non-inferior to an existing standard test"
       ),
 
       ## 2.Type
@@ -140,33 +138,38 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
     htmltools::tags$h3("📊 Key Parameters"),
     DT::datatable(
       data.frame(
-        Parameter = c("Target Accuracy for test 1",
-                      "Target Accuracy for test 2",
+        Parameter = c("True Accuracy for test S",
+                      "True Accuracy for test E",
                       "Conditional Probability",
                       "Confidence Level",
                       "Statistical Power",
-                      "Difference in Theta"
+                      "Unacceptable Difference",
+                      "Group Allocation"
+
         ),
-        Symbol    = c("θ1",
-                      "θ2",
-                      "P(T1=1|T2=1)",
+        Symbol    = c("θS",
+                      "θE",
+                      "P(Ts=1|Te=1)",
                       "1 - α",
                       "1 - β",
-                      "Δ1"
+                      "ΔM",
+                      "R"
         ),
-        Value     = c(theta1,
-                      theta2,
-                      prob_t1pos_give_t2pos,
+        Value     = c(theta_S,
+                      theta_E,
+                      p_ts_pos_given_te_pos,
                       paste0((1-alpha)*100, "%"),
                       paste0((1-beta)*100, "%"),
-                      abs(theta2-theta1)
+                      delta,
+                      R
         ),
-        Notes     = c("The expected sensitivity or specificity of test 1 in alternative hypothsis",
-                      "The expected sensitivity or specificity of test 2 in alternative hypothsis",
-                      "Conditional probability of test 1 being positive when test 2 being positive",
+        Notes     = c("The true sensitivity or specificity of an established standard test",
+                      "The true sensitivity or specificity of a new experimental test",
+                      "Conditional probability of the established standard test being positive when the new experimental test being positive",
                       "1 - Type I error rate",
                       "1 - Type II error rate",
-                      "Difference between sensitivity or specificity under the alternative hypothesis"
+                      "The smallest difference in accuracy which would not be considered non-inferior",
+                      "Ratio of patients without to with the condition"
         )
       ),
 
@@ -193,7 +196,7 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
         ),
 
         htmltools::tags$p(
-          "For comparing sensitivity or specificity with a given precision, the null and alternative hypotheses are:"
+          "For testing the non-inferiority of sensitivity or specificity between an established standard test and a new experimental test with a given precision, the null and alternative hypotheses are:"
         ),
 
         htmltools::tags$div(
@@ -210,8 +213,8 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
               "display: inline-block;"
             ),
 
-            "$$ H_{0}: \\theta_{1} = \\theta_{2} $$",
-            "$$ H_{1}: \\theta_{1} ≠ \\theta_{2} $$"
+            "$$ H_{0}: (\\theta_{S} - \\theta_{E}) ≥ ΔM $$",
+            "$$ H_{1}: (\\theta_{S} - \\theta_{E}) < ΔM $$"
           )
         ),
 
@@ -234,7 +237,7 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
               "display: inline-block;"
             ),
 
-            "$$ n = \\dfrac{[Z_{\\alpha/2} \\sqrt{V_{0}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2})} + Z_{\\beta} \\sqrt{V_{A}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2})}]^2}{(Δ_{1})^2} $$"
+            "$$ n = \\dfrac{(Z_{\\alpha} + Z_{\\beta})^2 V_{A}(\\hat{\\theta}_{S} - \\hat{\\theta}_{E})}{(\\theta_{S} - \\theta_{E} - \\Delta_{M})^2} $$"
           )
         )
 
@@ -268,7 +271,7 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
               "display: inline-block;"
             ),
 
-            paste0("$$ V_{0}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2}) = \\theta_{1} + \\theta_{2} - 2 \\times \\theta_{2} \\times P(T_{1}=1|T_{2}=1) $$")
+            paste0("$$ V_{0}(\\hat{\\theta}_{S}-\\hat{\\theta}_{E}) = \\theta_{S} + \\theta_{E} - 2 \\times \\theta_{E} \\times P(T_{S}=1|T_{E}=1) $$")
           )
         ),
 
@@ -291,7 +294,7 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
               "display: inline-block;"
             ),
 
-            paste0("$$ V_{A}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2}) = V_{0}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2}) - Δ_{1}^2 $$")
+            paste0("$$ V_{A}(\\hat{\\theta}_{S}-\\hat{\\theta}_{E}) = V_{0}(\\hat{\\theta}_{S}-\\hat{\\theta}_{E}) - (\\theta_{S}-\\theta_{E})^2 $$")
           )
         )
 
@@ -315,8 +318,8 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
           htmltools::tags$p(
             style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
             sprintf(
-              "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
-              alpha/2, qnorm(alpha/2)
+              "$$z_{\\alpha} = z_{%.3f} = %.3f $$",
+              alpha, qnorm(alpha)
             ),
             sprintf(
               "$$z_{\\beta} = z_{%.2f} = %.3f $$",
@@ -335,8 +338,8 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
           htmltools::tags$p(
             style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
             sprintf(
-              paste0("$$ V_{0}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2}) = %.3f + %.3f - 2 \\times %.3f \\times %.3f = %.3f $$"),
-              theta1, theta2, theta2, prob_t1pos_give_t2pos, V0_delta_theta
+              paste0("$$ V_{0}(\\hat{\\theta}_{S}-\\hat{\\theta}_{E}) = %.3f + %.3f - 2 \\times %.3f \\times %.3f = %.3f $$"),
+              theta_S, theta_E, theta_E, p_ts_pos_given_te_pos, V0_delta_theta
             )
           )
         ),
@@ -346,8 +349,8 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
           htmltools::tags$p(
             style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
             sprintf(
-              paste0("$$ V_{A}(\\hat{\\theta}_{1}-\\hat{\\theta}_{2}) = %.3f - (%.3f - %.3f)^2= %.3f $$"),
-              V0_delta_theta, theta1, theta2, VA_delta_theta
+              paste0("$$ V_{A}(\\hat{\\theta}_{S}-\\hat{\\theta}_{E}) = %.3f - (%.3f - %.3f)^2= %.3f $$"),
+              V0_delta_theta, theta_S, theta_E, VA_delta_theta
             )
           )
         ),
@@ -365,13 +368,13 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
 
             htmltools::HTML(
               sprintf(
-                "$$n = \\dfrac{[(%.3f)\\times \\sqrt{%.3f}+(%.3f)\\times \\sqrt{%.3f}]^2}{(%.3f-%.3f)^2} ≈ %d$$",
-                qnorm(alpha/2),
-                V0_delta_theta,
+                "$$n = \\dfrac{(%.3f+%.3f)^2\\times %.3f}{(%.3f-%.3f-%.3f)^2} ≈ %d$$",
+                qnorm(alpha),
                 qnorm(beta),
                 VA_delta_theta,
-                theta1,
-                theta2,
+                theta_S,
+                theta_E,
+                delta,
                 N
               )
             )
@@ -387,25 +390,53 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
 
 
         if(paired) {
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ N_{1} = N_{2} = n = %d $$"),
-                n_total
+
+          htmltools::tagList(
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ N_{S+} = N_{E+} = n = %d $$"),
+                  n_with_condition
+                )
+              )
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ N_{S-} = N_{E-} = R \\times n = %d $$"),
+                  n_without_condition
+                )
               )
             )
           )
 
         } else {
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ N_{1} = n = %d, N_{2} = n = %d$$"),
-                n_test1, n_test2
+
+          htmltools::tagList(
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ N_{S+} = n = %d, N_{E+} = n = %d$$"),
+                  n_testS_with_condition, n_testE_with_condition
+                )
+              )
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ N_{S-} = R \\times n = %d, N_{E-} = R \\times n = %d$$"),
+                  n_testS_without_condition, n_testE_without_condition
+                )
               )
             )
           )
@@ -450,17 +481,47 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
         ceiling(n_total)
       ),
 
-      htmltools::tags$h4(style = "margin-top: 0;", "Participants for test 1 / test 2"),
+      if(paired) {
 
-      htmltools::tags$p(
-        style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-        paste0(n_test1," / ", n_test2)
-      ),
+        htmltools::tagList(
+          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S and test E with condition"),
+
+          htmltools::tags$p(
+            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+            n_with_condition
+          ),
+
+          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S and test E without condition"),
+
+          htmltools::tags$p(
+            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+            n_without_condition
+          )
+        )
+
+      } else {
+
+        htmltools::tagList(
+          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S / test E with condition"),
+
+          htmltools::tags$p(
+            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+            paste0(n_testS_with_condition," / ", n_testE_with_condition)
+          ),
+
+          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S / test E without condition"),
+
+          htmltools::tags$p(
+            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+            paste0(n_testS_without_condition," / ", n_testE_without_condition)
+          )
+        )
+      },
 
       htmltools::tags$p(
         paste0("This provides ", (1-beta)*100, "% power"),
         paste0(" with ", (1-alpha)*100, "% confidence"),
-        "to detect a difference in sensitivity or specificity"
+        "to detect non-inferiority in sensitivity or specificity"
       )
 
     ),
@@ -476,19 +537,19 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
         style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
         htmltools::tags$strong("1. Method:"),
         htmltools::tags$br(),
-        "Sample size calculations for comparing sensitivity or specificity"
+        "Sample size calculations to detect non-inferiority"
       ),
 
       ## 2.Assumptions
 
 
-        htmltools::tags$p(
-          style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
-          htmltools::tags$strong("2. Assumptions:"),
-          htmltools::tags$br(),
-          "The test results between patients must be mutually independent"
+      htmltools::tags$p(
+        style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
+        htmltools::tags$strong("2. Assumptions:"),
+        htmltools::tags$br(),
+        "The test results between patients must be mutually independent"
 
-        ),
+      ),
 
 
       ## 3.Limitations
@@ -531,7 +592,22 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
           onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
           onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
           "doi:https://doi.org/10.2214/ajr.159.3.1503041"
+        ),
+
+        htmltools::tags$br(),
+        "[3] Blackwelder WC. “Proving the null hypothesis” in clinical trials. ",
+        htmltools::tags$em("Controlled clinical trials."),
+        " 1982;3(4):345-353. ",
+        htmltools::tags$a(
+          href = "doi:https://doi.org/10.1016/0197-2456(82)90024-1",
+          target = "_blank",
+          style = "color: #1a5fb4; text-decoration: none; border-bottom: 1px solid #c1dbf7;
+             transition: border-color 0.3s, color 0.3s;",
+          onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
+          onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
+          "doi:https://doi.org/10.1016/0197-2456(82)90024-1"
         )
+
 
       )
 
@@ -652,16 +728,34 @@ sample_compare_sesp <- function(theta1, theta2, prob_t1pos_give_t2pos=NULL, alph
   }
 
   # return the structured object
-  invisible(
-    structure(
-      list(
-        sample_size = list(n_total = n_total, n_test1 = n_test1, n_test2 = n_test2),
-        parameters = list(theta1 = theta1, theta2 = theta2, prob_t1pos_give_t2pos = prob_t1pos_give_t2pos, alpha = alpha, beta = beta, paired = paired),
-        html_report = html_report
-      ),
-      class = "diag_sample_size_html"
+  if(paired) {
+
+    invisible(
+      structure(
+        list(
+          sample_size = list(n_total = n_total, n_with_condition = n_with_condition, n_without_condition = n_without_condition),
+          parameters = list(theta_S = theta_S, theta_E = theta_E, p_ts_pos_given_te_pos = p_ts_pos_given_te_pos, alpha = alpha, beta = beta, delta = delta, R = R, paired = paired),
+          html_report = html_report
+        ),
+        class = "diag_sample_size_html"
+      )
     )
-  )
+
+  } else {
+
+    invisible(
+      structure(
+        list(
+          sample_size = list(n_total = n_total, n_testS_with_condition = n_testS_with_condition, n_testS_without_condition = n_testS_without_condition,
+                             n_testE_with_condition = n_testE_with_condition, n_testE_without_condition = n_testE_without_condition),
+          parameters = list(theta_S = theta_S, theta_E = theta_E, p_ts_pos_given_te_pos = p_ts_pos_given_te_pos, alpha = alpha, beta = beta, delta = delta, R = R, paired = paired),
+          html_report = html_report
+        ),
+        class = "diag_sample_size_html"
+      )
+    )
+
+  }
 
 
 }

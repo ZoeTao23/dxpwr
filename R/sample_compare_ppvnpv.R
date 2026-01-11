@@ -2,8 +2,8 @@
 #'
 #' Calculate the required sample size for comparing the positive predictive value (PPV) or negative predictive value (NPV) between two diagnostic tests.
 #'
-#' @param theta2 Numeric. NPV or PPV of test 2 (0 < theta2 < 1).
-#' @param p Numeric vector (length = 8). Probability components required for calculation.
+#' @param theta2 (numeric): NPV or PPV of test 2 (0 < theta2 < 1).
+#' @param p (list): vector (length = 8). Probability components required for calculation.
 #' \describe{
 #'     For patients without the condition：
 #'     \item{p[1]}{the proportion of patients testing positive on both tests}
@@ -16,13 +16,13 @@
 #'     \item{p[7]}{the proportion testing positive on test 2 and negative on test 1}
 #'     \item{p[8]}{the proportion testing negative on both tests}
 #'   }
-#' @param alpha Numeric. Significance level (0 < alpha < 1).
-#' @param beta Numeric. Type II error rate (0 < beta < 1).
-#' @param gamma Numeric. A specific value of interest for rPPV under the alternative hypothesis (gamma > 0).
-#' @param delta Numeric. The null hypothesis is rPPV = delta. (In most cases, let delta = 1).
-#' @param paired Logical. Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
-#' @param choice Character. `"PPV"` for positive predictive value, `"NPV"` for negative predictive value.
-#' @param alternative Character. `"less"`, `"greater"`, or `"two.sided"`.
+#' @param alpha (numeric): Significance level (0 < alpha < 1).
+#' @param beta (numeric): Type II error rate (0 < beta < 1).
+#' @param gamma (numeric): A specific value of interest for rPPV under the alternative hypothesis (gamma > 0).
+#' @param delta (numeric): The null hypothesis is rPPV = delta. (In most cases, let delta = 1).
+#' @param paired (logical): Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
+#' @param choice (character): `"PPV"` for positive predictive value, `"NPV"` for negative predictive value.
+#' @param alternative (character): `"less"`, `"greater"`, or `"two.sided"`.
 #' @return An object of class "diag_sample_size_html" containing:
 #'   - `sample_size` (list): Required sample size.
 #'   - `parameters` (list): Input parameters.

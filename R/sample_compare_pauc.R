@@ -1,50 +1,42 @@
 #' Sample Size Calculator for Diagnostic Tests
 #'
-#' Calculate the required sample size for comparing sensitivity at a fixed false positive rate (FPR) or specificity at a fixed false negative rate (FNR) of two diagnostic tests.
+#' Calculate the required sample size for comparing partial Area Under the ROC Curve (pAUC) between two diagnostic tests.
 #'
-#' @param metric (character): Performance metric to be evaluated, must be either "sens" or "sepc":
-#'   - `"sens"`: Sensitivity at the fixed FPR.
-#'   - `"spec"`: Specificity at the fixed FNR.
 #' @param A_null (numeric): AUC under the null hypothesis.
 #' @param b_null (numeric): Ratio of the standard deviations of the distributions of test results for patients without versus with the condition, σ_without/σ_with (default: 1).
 #' @param A1_alter (numeric): AUC of test 1 under the alternative hypothesis.
-#' @param b1_alter (numeric): Ratio of standard deviations of test 1 under the alternative hypothesis.
+#' @param b1_alter (numeric): Ratio of the standard deviations of the distributions of results for test 1 for patients without versus with the condition, σ1_without/σ1_with (default: 1).
 #' @param A2_alter (numeric): AUC of test 2 under the alternative hypothesis.
-#' @param b2_alter (numeric): Ratio of standard deviations of test 2 under the alternative hypothesis.
-#' @param e (numeric): For "sens" provide false positive rate value, and for "spec" provide false negative rate value.
+#' @param b2_alter (numeric): Ratio of the standard deviations of the distributions of results for test 2 for patients without versus with the condition, σ2_without/σ2_with (default: 1).
+#' @param e1 (numeric): Lower bound of the false positive rate (FPR) range.
+#' @param e2 (numeric): Upper bound of the false positive rate (FPR) range.
 #' @param rD (numeric): The correlation of the underlying bivariate binormal distribution for patients with the condition (default: 0.5).
 #' @param rN (numeric): The correlation of the underlying bivariate binormal distribution for patients without the condition (default: 0.5).
 #' @param alpha (numeric): Significance level (default: 0.05).
 #' @param beta (numeric): Type II error rate.
-#' @param paired (logical): Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
-#' @param dist (Character): The assumption for choosing the variance function (default: "binorm"):
-#'   - `"binorm"`: Assume that the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution.
-#'   - `"obs_binorm"`: Assume that the observed test results are on a truly continuous scale and they follow a binormal distribution (or can be transformed to a binormal distribution).
-#' @param R (numeric): Ratio of patients without to with the condition (default: 1).
+#' @param paired (logical). Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
+#' @param R (numeric): Ratio of patients with and without the condition (default: 1).
 #' @return An object of class "diag_sample_size_html" containing:
 #'   - `sample_size` (list): Required sample size.
 #'   - `parameters` (list): Input parameters.
 #'   - `html_report` (html): Sample size calculation report.
 #' @examples
-#' n <- sample_compare_restricted_sesp(metric="sens", A_null=0.8, b_null=1, A1_alter=0.8, b1_alter=1, A2_alter=0.9, b2_alter=1, e=0.1, rN=0.5, rD=0.5, alpha=0.05, beta=0.2, paired=TRUE, R=1, dist ="binorm")
+#' n <- sample_compare_pauc(A_null= 0.8, b_null=1, A1_alter=0.8, b1_alter=1, A2_alter=0.9, b2_alter=1, e1=0, e2=0.2, rN=0, rD=0, alpha = 0.05, beta=0.2, paired=FALSE)
 #' print(n)
 #' @export
-sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b1_alter=1, A2_alter, b2_alter=1, e, rN=0.5, rD=0.5, alpha=0.05, beta, paired=TRUE, R=1) {
+sample_compare_pauc <- function(A_null, b_null=1, A1_alter, b1_alter=1, A2_alter, b2_alter=1, e1, e2, rN=0.5, rD=0.5, alpha=0.05, beta, R=1, paired=FALSE) {
+
 
   #  (1) ----- validate inputs
-  if (length(metric) != 1 || !metric %in% c("sens", "spec")) {
-    stop("'metric' must be either 'sens' or 'spec'.")
-  }
-
   if (!is.numeric(A_null) || length(A_null) != 1 || A_null <= 0 ||A_null >= 1) {
     stop("'A_null' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(A1_alter) || length(A1_alter) != 1 || A1_alter <= 0 || A1_alter >= 1) {
+  if (!is.numeric(A1_alter) || length(A1_alter) != 1 || A1_alter <= 0 ||A1_alter >= 1) {
     stop("'A1_alter' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(A2_alter) || length(A2_alter) != 1 || A2_alter <= 0 || A2_alter >= 1) {
+  if (!is.numeric(A2_alter) || length(A2_alter) != 1 || A2_alter <= 0 ||A2_alter >= 1) {
     stop("'A2_alter' must be a single numeric value in (0, 1).")
   }
 
@@ -60,8 +52,12 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
     stop("'b2_alter' must be a single positive numeric value.")
   }
 
-  if (!is.numeric(e) || length(e) != 1 || e <= 0 || e >= 1) {
-    stop("'e' must be a single numeric value in (0, 1).")
+  if (!is.numeric(e1) || length(e1) != 1 || e1 < 0 || e1 >= 1) {
+    stop("'e1' must be a single numeric value in [0, 1).")
+  }
+
+  if (!is.numeric(e2) || length(e2) != 1 || e2 <= 0 || e2 > 1) {
+    stop("'e2' must be a single numeric value in (0, 1].")
   }
 
   if (!is.numeric(rD) || length(rD) != 1 || rD < -1 || rD > 1) {
@@ -76,97 +72,128 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
     stop("'alpha' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(beta) || length(beta) != 1|| beta <= 0 || beta >= 1) {
-    stop("beta must be a single numeric value in (0, 1).")
-  }
-
-  if (!is.logical(paired) || length(paired) != 1) {
-    stop("'paired' must be a single logical value TRUE or FALSE.")
+  if (!is.numeric(beta) || length(beta) != 1 || beta <= 0 || beta >= 1) {
+    stop("'beta' must be a single numeric value in (0, 1).")
   }
 
   if (!is.numeric(R) || length(R) != 1 || R <= 0) {
     stop("'R' must be a single positive numeric value.")
   }
 
-  if (!is.character(dist) || length(dist) != 1 || !(dist %in% c("binorm", "obs_binorm"))) {
-    stop("'dist' must be either 'binorm' or 'obs_binorm'.")
+  if (!is.logical(paired) || length(paired) != 1) {
+    stop("'paired' must be a single logical value (TRUE or FALSE).")
   }
 
   #  (2) ----- calculation modules
 
-  ## assign empirical correlation
+  message("Null hypothesis: AUC1 = AUC2 when fdr is between (",e1,",",e2,")")
+  message("Alternative hypothesis: AUC1 = AUC2 = ", A_null, " when fdr is between (",e1,",",e2,")")
+
+  ## define the correlation
   if(paired){
 
     message("For paired design, rD = rN = 0.5 is a typical value for the correlation between tests")
     message("If not specified, rD and rN default to 0.5")
 
-  } else {
+  } else if(!paired) {
 
     message("For unpaired design, rD = rN = 0")
     r <- 0
     rN <- rD <- r
   }
 
+  ## calculate variance function
+  f <- function(a, b, e1, e2){
 
-  ## calcuate variance function
+    e_prime <- (qnorm(c(e1,e2)) + a * b / (1 + b^2 )) * sqrt(1 + b^2)
+
+    expr1 <- exp(-a^2 / 2 / (1 + b^2))
+    expr2 <- 1 + b^2
+    expr3 <- pnorm(e_prime[2]) - pnorm(e_prime[1])
+
+    f_value <- expr1 * (2 * pi * expr2) ^ (-1/2) * expr3
+    return(f_value)
+
+  }
+
+
+  g <- function(a, b, e1, e2){
+
+    e_prime <- (qnorm(c(e1,e2)) + a * b / (1 + b^2)) * sqrt(1 + b^2)
+    e_double_prime <- (e_prime)^2 / 2
+
+    expr1 <- exp(-a^2 / 2 / (1 + b^2))
+    expr2 <- 1 + b^2
+    expr3 <- pnorm(e_prime[2]) - pnorm(e_prime[1])
+    expr4 <- exp(-e_double_prime[1]) - exp(-e_double_prime[2])
+
+    g_value <- expr1 * (2 * pi * expr2)^(-1) * expr4 - a * b* expr1 * (2 * pi * expr2^3)^(-1/2) * expr3
+    return(g_value)
+
+  }
+
+
+  VA <- function(a, b, e1, e2) {
+
+    f <- f(a, b, e1, e2)
+    g <- g(a, b, e1, e2)
+    V <- f^2 * (1 + b^2 / R + a^2 / 2) + g^2 * (b^2 * (1+R) / 2 / R)
+
+    return(V)
+  }
+
+  C_delta_A <- function(a1, a2, b1, b2, e1, e2, rN, rD) {
+
+    f1 <- f(a1, b1, e1, e2)
+    f2 <- f(a2, b2, e1, e2)
+    g1 <- g(a1, b1, e1, e2)
+    g2 <- g(a2, b2, e1, e2)
+
+    term1 <- f1 * f2 * (rD + rN * b1 * b2 / R + rD^2 * a1 * a2 / 2)
+    term2 <- g1 * g2 * b1 * b2 * (rN^2 + R * rD^2) / 2 / R
+    term3 <- f1 * g2 * rD^2 * a1 * b2 / 2
+    term4 <- f2 * g1 * rD^2 * a2 * b1
+
+    C <- term1 + term2 + term3 + term4
+    return(C)
+
+  }
+
   a_null <- get_binorm_params(A_null, b_null)$a
   a1_alter <- get_binorm_params(A1_alter, b1_alter)$a
   a2_alter <- get_binorm_params(A2_alter, b2_alter)$a
 
-  z1_alter <- a1_alter + b1_alter * qnorm(e)
-  z2_alter <- a2_alter + b2_alter * qnorm(e)
-
-  if(dist == "binorm") {
-
-    V_theta <- function(a, b, e, R) {
-
-      g <- qnorm(e)
-      V <- 1 + b^2 / R + a^2 / 2 + g^2 * b^2 * (1 + R) / (2 * R)
-
-      return(V)
-    }
-
-  } else if(dist == "obs_binorm") {
-
-    V_theta <- function(a, b, e, R) {
-
-      g <- qnorm(e)
-      V <- 1 + b^2 / R + a^2 / 2 + g^2 * b^2 * (1 + R) / (2 * R) + g * a * b
-
-      return(V)
-    }
-
-  } else {
-
-    stop("Invalid 'dist' value. Use 'binorm' or 'obs_binorm'.")
-
-  }
+  f_null <- f(a_null, b_null, e1, e2)
+  g_null <- g(a_null, b_null, e1, e2)
+  f1 <- f(a1_alter, b1_alter, e1, e2)
+  g1 <- g(a1_alter, b1_alter, e1, e2)
+  f2 <- f(a2_alter, b2_alter, e1, e2)
+  g2 <- g(a2_alter, b2_alter, e1, e2)
 
 
-  C_delta_theta <- function(a1, a2, b1, b2, e, rD, rN) {
+  ## calculate variance function
+  V0_A1 <- V0_A2 <- VA(a_null, b_null, e1, e2)
+  C0_delta_A <- C_delta_A(a_null, a_null, b_null, b_null, e1, e2, rN, rD)
+  V0_delta_A <- V0_A1 + V0_A2 - 2 * C0_delta_A
 
-    g <- qnorm(e)
-    C <- rD + (rN * b1 * b2) / R + (rD^2 * a1 * a2) / 2 + g ^ 2 * b1 * b2 * (rN^2 + R * rD^2) / (2 * R) + g* rD^2 * (a1 * b2 + a2 * b1) / 2
+  VA_A1 <- VA(a1_alter, b1_alter, e1, e2)
+  VA_A2 <- VA(a2_alter, b2_alter, e1, e2)
+  CA_delta_A <- C_delta_A(a1_alter, a2_alter, b1_alter, b2_alter, e1, e2, rN, rD)
+  VA_delta_A <- VA_A1 + VA_A2 - 2 * CA_delta_A
 
-    return(C)
-  }
-
-  V0_A1 <- V0_A2 <- V_theta(a_null, b_null, e, R)
-  VA_A1 <- 1 + V_theta(a1_alter, b1_alter, e, R)
-  VA_A2 <- 1 + V_theta(a2_alter, b2_alter, e, R)
-
-  C0_delta_A <- C_delta_theta(a_null, a_null, b_null, b_null, e, rD, rN)
-  CA_delta_A <- C_delta_theta(a1_alter, a2_alter, b1_alter, b2_alter, e, rD, rN)
-
-  V0_delta_A <- V0_A1 + V0_A2 - 2*C0_delta_A
-  VA_delta_A <- VA_A1 + VA_A2 - 2*CA_delta_A
   var_function <- c(V0_delta_A, VA_delta_A)
 
   ## calculate delta
-  delta1 <- abs(z1_alter - z2_alter)
+  fpr <- function(a, b, x) {
+    e <- pnorm(a + b * qnorm(x))
+    return(e)
+  }
+
+  delta1 <- abs(integrate(function(x) fpr(a1_alter, b1_alter, x), e1, e2)$value -
+                  integrate(function(x) fpr(a2_alter, b2_alter, x), e1, e2)$value)
 
 
-  ## calculate sample size with and without condition
+  ## calculate sample size
   N <- get_diag_sample(
     var_function = var_function,
     alpha = alpha,
@@ -175,35 +202,34 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
     test_type = "two_diagnostic"
   )
 
-  if(paired){
 
+  ## calculate sample size with and without condition
+  if(paired){
     n_test1_with_condition <- ceiling(N)
-    n_test1_without_condition <- ceiling(R*N)
+    n_test1_without_condition <- ceiling(N*R)
     n_test1 <- n_test1_with_condition + n_test1_without_condition
 
     n_test2_with_condition <- ceiling(N)
-    n_test2_without_condition <- ceiling(R*N)
+    n_test2_without_condition <- ceiling(N*R)
     n_test2 <- n_test2_with_condition + n_test2_without_condition
 
     n_total <- n_test1
 
   } else {
-
     n_test1_with_condition <- ceiling(N)
-    n_test1_without_condition <- ceiling(R*N)
+    n_test1_without_condition <- ceiling(N*R)
     n_test1 <- n_test1_with_condition + n_test1_without_condition
 
     n_test2_with_condition <- ceiling(N)
-    n_test2_without_condition <- ceiling(R*N)
+    n_test2_without_condition <- ceiling(N*R)
     n_test2 <- n_test2_with_condition + n_test2_without_condition
 
     n_total <- n_test1 + n_test2
+
   }
 
 
   #  (3) ----- structured outputs
-
-  ## method reference
   html_report <- htmltools::tags$div(
     class = "clinical-report",
     style = "font-family: Arial; max-width: 800px; margin: auto;",
@@ -225,7 +251,7 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
       htmltools::tags$p(
         htmltools::tags$strong("Objective:"),
         "To compare the ",
-        htmltools::tags$strong(style = paste0("color:", ifelse(a1_alter > 0.5, "#E74C3C", "#27AE60"), ";"), ifelse(metric=="sens", "sensitivity at fixed FPR", "specificity at fixed FNR")),
+        htmltools::tags$strong(style = paste0("color:", ifelse(a1_alter > 0.5, "#E74C3C", "#27AE60"), ";"),"patial area under the ROC curve"),
         "between two diagnostic tests"
       ),
 
@@ -254,11 +280,12 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
                       "Binominal Parameter in Null Hypothesis",
                       "Binominal Parameter for Test 1",
                       "Binominal Parameter for Test 2",
-                      ifelse(metric=="sens", "False Positive Rate", "False Negative Rate"),
+                      "FPR Range",
                       "Correlation for Patients with Condition",
                       "Correlation for Patients without Condition",
                       "Confidence Level",
                       "Statistical Power",
+                      "Difference in AUC",
                       "Group Allocation"
 
         ),
@@ -268,11 +295,12 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
                       "(a_null, b_null)",
                       "(a1_alter, b1_alter)",
                       "(a2_alter, b2_alter)",
-                      "e",
+                      "(e1, e2)",
                       "rN",
                       "rD",
                       "1 - α",
                       "1 - β",
+                      "Δ1",
                       "R"
         ),
         Value     = c(ifelse(is.null(A_null),"Not specified", A_null),
@@ -281,11 +309,12 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
                       ifelse(is.null(A_null),"Not specified", paste0("(", round(a_null,3), ", ", round(b_null,3), ")")),
                       paste0("(", round(a1_alter,3), ", ", round(b1_alter,3), ")"),
                       paste0("(", round(a2_alter,3), ", ", round(b2_alter,3), ")"),
-                      e,
+                      paste0("(", e1, ", ", e2, ")"),
                       ifelse(is.na(rN), "Not specified", rN),
                       ifelse(is.na(rD), "Not specified", rD),
                       paste0((1-alpha)*100, "%"),
                       paste0((1-beta)*100, "%"),
+                      abs(A1_alter-A2_alter),
                       R
         ),
         Notes     = c("The expected AUC in null hypothesis",
@@ -294,12 +323,13 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
                       "a = (μ0_with - μ0_without)/σ0_with; b = σ0_without/σ0_with, to determine the shape of ROC in null hypothesis",
                       "a = (μ1_with - μ1_without)/σ1_with; b = σ1_without/σ1_with, to determine the shape of ROC of test 1 in alternative hypothesis",
                       "a = (μ2_with - μ2_without)/σ2_with; b = σ2_without/σ2_with, to determine the shape of ROC of test 2 in alternative hypothesis",
-                      paste0("Constraint on ", ifelse(metric=="sens", "sensitivity", "specificity")),
+                      "e1 = Lower bound of FPR, e2 = Upper bound of FPR",
                       "The correlation of the underlying bivariate binormal distribution for patients with the condition",
                       "The correlation of the underlying bivariate binormal distribution for patients without the condition",
                       "1 - Type I error rate",
                       "1 - Type II error rate",
-                      "Ratio of patients without to with the condition"
+                      "Difference between AUC under the alternative hypothesis",
+                      "Ratio of patients with and without the condition"
         )
       ),
 
@@ -325,61 +355,28 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
           "Step 1: Sample Size Formula"
         ),
 
-        if(metric=="sens") {
+        htmltools::tags$p(
+          "For comparing patrial area under the ROC curve (AUC) with a given precision, the null and alternative hypotheses are:"
+        ),
 
-          htmltools::tagList(
-            htmltools::tags$p(
-              "For comparing sensitivity with a given precision, the null and alternative hypotheses are:"
+        htmltools::tags$div(
+          style = "text-align: center; margin: 10px 0;",
+
+          htmltools::tags$p(
+            style = paste(
+              "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+              # "font-size: 1.2em;",
+              "padding: 5px;",
+              "background-color: white;",
+              "border-radius: 5px;",
+              "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+              "display: inline-block;"
             ),
 
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                "$$ H_{0}: Se_{1,FPR=e} = Se_{2,FPR=e} $$",
-                "$$ H_{1}: Se_{1,FPR=e} ≠ Se_{2,FPR=e} $$"
-              )
-            )
+            "$$ H_{0}: AUC_{1,e_{1} \\leq FPR \\leq e_{2}} = AUC_{2,e_{1} \\leq FPR \\leq e_{2}}() $$",
+            "$$ H_{1}: AUC_{1,e_{1} \\leq FPR \\leq e_{2}}() ≠ AUC_{2,e_{1} \\leq FPR \\leq e_{2}} $$"
           )
-        }
-        else{
-
-          htmltools::tagList(
-            htmltools::tags$p(
-              "For comparing specificity with a given precision, the null and alternative hypotheses are:"
-            ),
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                "$$ H_{0}: Sp_{1,FNR=e} = Sp_{2,FNR=e} $$",
-                "$$ H_{1}: Sp_{1,FNR=e} ≠ Sp_{2,FNR=e} $$"
-              )
-            )
-          )
-        },
-
+        ),
 
         htmltools::tags$p(
           "The required sample size is calculated using the formula:"
@@ -444,47 +441,27 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
             "Where, the variance fuction of AUC is"
           ),
 
-          if(dist=="binorm") {
+          htmltools::tags$div(
+            style = "text-align: center; margin: 10px 0;",
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+              paste0("$$ \\hat{V}(\\hat{A})= \\frac{e^{-a^2/2}}{4\\pi(1+b^2)^3} \\times\\{a^2[b^4+(1+b^2)^2]+2(1+b^2)^2+\\frac{a^2b^4+2b^2(1+b^2)^2}{R}\\} $$")
 
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V}(z[\\hat{Se}_{",ifelse(metric=="sens","FPR","FNR"),"=e}]) = 1+b^2/R+a^2/2+b^2[\\Phi^{-1}(e)]^2(1+R)/(2R) $$")
-              )
             )
+          ),
 
-          } else if (dist=="obs_binorm") {
+          htmltools::tags$p(
+            "Specifically, when b = 1"
+          ),
 
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
+          htmltools::tags$div(
+            style = "text-align: center; margin: 10px 0;",
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+              paste0("$$ \\hat{V}(\\hat{A})=0.0099 \\times e^{-a^2/2} \\times(5a^2+8+\\dfrac{a^2+8}{R}) $$")
 
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V}(z[\\hat{Se}_{",ifelse(metric=="sens","FPR","FNR"),"=e}]) = 1+b^2/R+a^2/2+b^2[\\Phi^{-1}(e)]^2(1+R)/(2R)+ab\\Phi^{-1}(e) $$")
-              )
             )
-
-          },
+          ),
 
           htmltools::tags$p(
             paste0(ifelse(paired, "And for paired design, ", "And for unpaired design, "), "the covariance function is:")
@@ -497,11 +474,23 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
                 style = "text-align: center; margin: 10px 0;",
                 htmltools::tags$p(
                   style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                  paste0(ifelse(metric=="sens","$$\\hat{C}((\\hat{Se}_{FPR=e})_{1}, (\\hat{Se}_{FPR=e})_{2})","$$\\hat{C}((\\hat{Sp}_{FNR=e})_{1}, (\\hat{Sp}_{FNR=e})_{2})"),"= (r_{D}+\\frac{r_{N}b_{1}b_{2}}{R}+\\frac{r_{D}^2a_{1}a_{2}}{2}) + \\frac{g^2b_{1}b_{2}(r_{N}^2+Rr_{D}^2)}{2R} + \\frac{gr_{D}^2(a_{1}b_{2}+a_{2}b_{1})}{2} \\times ()  $$")
+                  paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= \\frac{e^{-[\\frac{a_{1}^2}{2(b_{1}^2+1)}+\\frac{a_{2}^2}{2(b_{2}^2+1)}]}}{2\\pi\\sqrt{(1+b_{1}^2)(1+b_{2}^2)}} \\{ (r_{D} + \\frac{r_{N}b_{1}b_{2}}{R}+\\frac{r_{D}^2a_{1}a_{2}}{2}) + \\frac{a_{1}a_{2}b_{1}^2b_{2}^2(r_{N}^2+Rr_{D}^2)}{2R(1+b_{1}^2)(1+b_{2}^2)} - r_{D}^2a_{1}a_{2}[\\frac{b_{2}^2}{2(1+b_{2}^2)}+\\frac{b_{1}^2}{2(1+b_{1}^2)}] \\} $$")
+
+                )
+              ),
+
+              htmltools::tags$p(
+                "Specifically, when b1  = b2 = 1"
+              ),
+
+              htmltools::tags$div(
+                style = "text-align: center; margin: 10px 0;",
+                htmltools::tags$p(
+                  style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                  paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= e^{-(a_{1}^2+a_{2}^2)/4} [\\frac{r_{D} + \\frac{r_{N}}{R}+\\frac{r_{D}^2a_{1}a_{2}}{2}}{12.5664} + \\frac{a_{1}a_{2}(\\frac{r_{N}^2}{R}+r_{D}^2)}{100.531} - \\frac{r_{D}^2a_{1}a_{2}}{25.1327}] $$")
 
                 )
               )
-
             )
 
           } else {
@@ -510,7 +499,7 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
               style = "text-align: center; margin: 10px 0;",
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                paste0(ifelse(metric=="sens","$$ \\hat{C}((\\hat{Se}_{FPR=e})_{1}, (\\hat{Se}_{FPR=e})_{2})","$$ \\hat{C}((\\hat{Sp}_{FNR=e})_{1}, (\\hat{Sp}_{FNR=e})_{2})")," = 0 $$")
+                paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= 0 $$")
 
               )
             )
@@ -543,7 +532,7 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
           htmltools::tags$p(
             style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
             sprintf(
-              "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
+              "$$z_{\\alpha/2} = z_{%.2f} = %.3f $$",
               alpha/2, qnorm(alpha/2)
             ),
             sprintf(
@@ -690,7 +679,7 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{1-} = N_{2-} = R \\times n = %d $$"),
+                  paste0("$$ N_{1-} = N_{2-} = n = %d $$"),
                   n_test1_without_condition
                 )
               )
@@ -716,7 +705,7 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{1-} = R \\times n = %d, N_{2-} = R \\times n = %d$$"),
+                  paste0("$$ N_{1-} = Rn = %d, N_{2-} = Rn = %d$$"),
                   n_test1_without_condition, n_test2_without_condition
                 )
               )
@@ -801,19 +790,25 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
       ),
 
       ## 2.Assumptions
-      htmltools::tags$p(
-        style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
-        htmltools::tags$strong("2. Assumptions:"),
-        htmltools::tags$br(),
-        paste0(
-          "Assume that ",
-          ifelse(dist=="binorm",
-                 "the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution",
-                 "the observed test results are on a truly continuous scale and they follow a binormal distribution (or can be transformed to a binormal distribution)"
-          )
-        )
 
-      ),
+      if(dist == "any") {
+        htmltools::tags$p(
+          style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
+          htmltools::tags$strong("2. Assumptions:"),
+          htmltools::tags$br(),
+          "No specific restrictions on the distributions of the test results"
+
+        )
+      } else if(dist == "binorm") {
+
+        htmltools::tags$p(
+          style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
+          htmltools::tags$strong("2. Assumptions:"),
+          htmltools::tags$br(),
+          "Assume that the test results have an underlying bivariate binormal distribution"
+
+        )
+      },
 
       ## 3.Limitations
       htmltools::tags$p(
@@ -824,7 +819,43 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
       ),
 
       ## 4.Reference:
-      if(dist == "binorm"){
+      if (dist == "any") {
+
+        htmltools::tags$p(
+          style = "margin: 15px 0px; line-height: 1.2;text-indent: -1em; padding-left: 1.5em;",
+          htmltools::tags$strong("4. Reference:"),
+
+          htmltools::tags$br(),
+          "[1] Blume JD. Bounding Sample Size Projections for the Area under a ROC Curve. ",
+          htmltools::tags$em("Journal of Statistical Planning and Inference."),
+          " 2009;139(3):711-721. ",
+          htmltools::tags$a(
+            href = "doi:https://doi.org/10.1016/j.jspi.2007.09.015",
+            target = "_blank",
+            style = "color: #1a5fb4; text-decoration: none; border-bottom: 1px solid #c1dbf7;
+             transition: border-color 0.3s, color 0.3s;",
+            onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
+            onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
+            "doi:https://doi.org/10.1016/j.jspi.2007.09.015"
+          ),
+
+          htmltools::tags$br(),
+          "[2] Rockette HE, Campbell WL, Britton CA, Holbert JM, King JL, Gur D. Empiric Assessment of Parameters That Affect the Design of Multireader Receiver Operating Characteristic Studies. ",
+          htmltools::tags$em("Academic Radiology."),
+          " 1999;6(12):723-729. ",
+          htmltools::tags$a(
+            href = "doi:https://doi.org/10.1016/s1076-6332(99)80468-1",
+            target = "_blank",
+            style = "color: #1a5fb4; text-decoration: none; border-bottom: 1px solid #c1dbf7;
+             transition: border-color 0.3s, color 0.3s;",
+            onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
+            onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
+            "doi:https://doi.org/10.1016/s1076-6332(99)80468-1"
+          )
+
+        )
+
+      } else if(dist == "binorm"){
 
         htmltools::tags$p(
           style = "margin: 15px 0px; line-height: 1.2;text-indent: -1em; padding-left: 1.5em;",
@@ -873,11 +904,6 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
           )
 
         )
-      } else if (dist == "binorm"){
-
-
-
-
       }
     ),
 
@@ -1006,6 +1032,5 @@ sample_compare_restricted_sesp <- function(metric, A_null, b_null=1, A1_alter, b
       class = "diag_sample_size_html"
     )
   )
-
 
 }

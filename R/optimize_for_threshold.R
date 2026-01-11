@@ -95,7 +95,7 @@ optimize_for_threshold <- function(spec_min, sens_at_spec_min, sens_min, alpha, 
       ),
       call = match.call()
     ),
-    class = "optimize_for_cutoff"
+    class = "optimize_for_threshold"
   )
 
   return(result)

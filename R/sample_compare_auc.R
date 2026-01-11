@@ -1,18 +1,20 @@
 #' Sample Size Calculator for Diagnostic Tests
 #'
-#' Calculate the required sample size for testing whether the Area Under the ROC Curve (AUC) a new experimental test (test E) is equivalent to an established standard test (test E).
+#' Calculate the required sample size for comparing the Area Under the ROC Curve (ROC) between two diagnostic tests.
 #'
-#' @param AUC_S (numeric): The true area under the ROC curve (AUC) of an established standard test (test S).
-#' @param b_S (numeric): Ratio of the standard deviations of the distributions of test results for test S for patients without versus with the condition, σs_without/σs_with (default: 1).
-#' @param AUC_E (numeric): The true area under the ROC curve (AUC) of a new experimental test (test E).
-#' @param b_E (numeric): Ratio of the standard deviations of the distributions of results for test E for patients without versus with the condition, σe_without/σe_with (default: 1).
-#' @param r (numeric): The correlation between the tests because of the paired design.
+#' @param A_null (numeric): AUC under the null hypothesis (default: NULL).
+#' @param b_null (numeric): Ratio of the standard deviations of the distributions of test results for patients without versus with the condition, σ_without/σ_with (default: 1).
+#' @param A1_alter (numeric): AUC of test 1 under the alternative hypothesis.
+#' @param b1_alter (numeric): Ratio of the standard deviations of the distributions of results for test 1 for patients without versus with the condition, σ1_without/σ1_with (default: 1).
+#' @param A2_alter (numeric): AUC of test 2 under the alternative hypothesis.
+#' @param b2_alter (numeric): Ratio of the standard deviations of the distributions of results for test 2 for patients without versus with the condition, σ2_without/σ2_with (default: 1).
+#' @param r (numeric): The correlation between the tests (default: NULL).
 #' @param rD (numeric): The correlation of the underlying bivariate binormal distribution for patients with the condition (default: 0.5).
 #' @param rN (numeric): The correlation of the underlying bivariate binormal distribution for patients without the condition (default: 0.5).
 #' @param alpha (numeric): Significance level (default: 0.05).
 #' @param beta (numeric): Type II error rate.
-#' @param delta (numeric):  The prespecified upper clinical limits for equivalence.
-#' @param paired (character): Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
+#' @param paired (logical): Whether the design is paired (`TRUE`) or unpaired (`FALSE`).
+#' @param R (numeric): Ratio of patients with and without the condition (default: 1).
 #' @param dist (character): The assumption for choosing the variance function (default: "any"):
 #'   - `"any"`: Applicable for tests with any underlying distributions.
 #'   - `"binorm"`: Assume that the test results have an underlying bivariate binormal distribution.
@@ -21,47 +23,25 @@
 #'   - `parameters` (list): Input parameters.
 #'   - `html_report` (html): Sample size calculation report.
 #' @examples
-#' n <- sample_equivalence_auc(AUC_S=0.92, b_S=1, AUC_E=0.90, b_E=1, rN=0.5, rD=0.5, delta=0.05, alpha=0.05, beta=0.2, R=1, paired=TRUE, dist="binorm")
+#' n <- sample_compare_auc(A1_alter=0.8, A2_alter=0.9, alpha=0.05, beta=0.2, r=0, R=1, paired=FALSE, dist="any")
+#' print(n)
+#' n <- sample_compare_auc(A1_alter=0.8, A2_alter=0.9, alpha=0.05, beta=0.2, r=0.5, R=1, paired=TRUE, dist="any")
+#' print(n)
+#' n <- sample_compare_auc(A_null=0.8, b_null=1, A1_alter=0.8, b1_alter=1, A2_alter=0.9, b2_alter=1, alpha=0.05, beta=0.2, R=1, paired=FALSE, dist="binorm")
+#' print(n)
+#' n <- sample_compare_auc(A_null=0.8, b_null=1, A1_alter=0.8, b1_alter=1, A2_alter=0.9, b2_alter=1, rD=0.5, rN=0.5, alpha=0.05, beta=0.2, R=1, paired=TRUE, dist="binorm")
 #' print(n)
 #' @export
-sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, rD=NULL, delta, alpha=0.05, beta, R=1, paired=TRUE, dist="any") {
+sample_compare_auc <- function(A_null=NULL, b_null=1, A1_alter, b1_alter=1, A2_alter, b2_alter=1, r=0.5, rN=0.5, rD=0.5, alpha=0.05, beta, R=1, paired=FALSE, dist="any") {
+
 
   #  (1) ----- validate inputs
-
-  if (!is.numeric(AUC_S) || length(AUC_S) != 1 || AUC_S <= 0 ||AUC_S >= 1) {
-    stop("'AUC_S' must be a single numeric value in (0, 1).")
+  if (!is.numeric(A1_alter) || length(A1_alter) != 1 || A1_alter <= 0 ||A1_alter >= 1) {
+    stop("'A1_alter' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(AUC_E) || length(AUC_E) != 1 || AUC_E <= 0 || AUC_E >= 1) {
-    stop("'AUC_E' must be a single numeric value in (0, 1).")
-  }
-
-  if(dist == "any") {
-
-    if (!is.numeric(r) || length(r) != 1 || r < -1 || r > 1) {
-      stop("'r' must be a single numeric value in [-1, 1].")
-    }
-
-  } else if (dist == "binorm") {
-
-    if (!is.numeric(rN) || length(rN) != 1 || rN < -1 || rN > 1) {
-      stop("'rN' must be a single numeric value in [-1, 1].")
-    }
-
-    if (!is.numeric(rD) || length(rD) != 1 || rD < -1 || rD > 1) {
-      stop("'rD' must be a single numeric value in [-1, 1].")
-    }
-
-    if (!is.numeric(b_S) || length(b_S) != 1 || b_S <= 0) {
-      stop("'b_S' must be a single positive numeric value.")
-    }
-
-    if (!is.numeric(b_E) || length(b_E) != 1 || b_E <= 0) {
-      stop("'b_E' must be a single positive numeric value.")
-    }
-
-  } else {
-    stop("'dist' must be either 'any' or 'binorm'.")
+  if (!is.numeric(A2_alter) || length(A2_alter) != 1 || A2_alter <= 0 ||A2_alter >= 1) {
+    stop("'A2_alter' must be a single numeric value in (0, 1).")
   }
 
   if (!is.numeric(alpha) || length(alpha) != 1 || alpha <= 0 || alpha >= 1) {
@@ -72,22 +52,63 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
     stop("'beta' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(delta) || length(delta) != 1 || delta <= 0 || delta >= 1) {
-    stop("'delta' must be a single numeric value in (0, 1).")
+  if (!is.logical(paired) || length(paired) != 1) {
+    stop("'paired' must be a single logical value TRUE or FALSE.")
   }
 
   if (!is.numeric(R) || length(R) != 1 || R <= 0) {
     stop("'R' must be a single positive numeric value.")
   }
 
-  if (!is.logical(paired) || length(paired) != 1) {
-    stop("'paired' must be a single logical value TRUE or FALSE.")
+  if (dist == "any"){
+
+    if(paired) {
+
+      if (!is.numeric(r) || length(r) != 1 || r < -1 || r > 1) {
+        stop("'r' must be a single numeric value in [-1, 1].")
+      }
+
+    }
+
+  } else if (dist == "binorm"){
+
+    if (!is.numeric(A_null) || length(A_null) != 1 || A_null <= 0 ||A_null >= 1) {
+      stop("'A_null' must be a single numeric value in (0, 1).")
+    }
+
+    if (!is.numeric(b_null) || length(b_null) != 1 || b_null <= 0) {
+      stop("'b_null' must be a single positive numeric value.")
+    }
+
+    if (!is.numeric(b1_alter) || length(b1_alter) != 1 || b1_alter <= 0) {
+      stop("'b1_alter' must be a single  positive numeric value.")
+    }
+
+    if (!is.numeric(b2_alter) || length(b2_alter) != 1 || b2_alter <= 0) {
+      stop("'b2_alter' must be a single  positive numeric value.")
+    }
+
+    if(paired) {
+      if (!is.numeric(rD) || length(rD) != 1 || rD < -1 || rD > 1) {
+        stop("'rD' must be a single numeric value in [-1, 1].")
+      }
+
+      if (!is.numeric(rN) || length(rN) != 1 || rN < -1 || rN > 1) {
+        stop("'rN' must be a single numeric value in [-1, 1].")
+
+      }
+    }
+
+  } else {
+
+    stop("'dist' must be either 'any' or 'binorm'.")
   }
 
-  #  (2) -----  calculation modules
-  message(paste0("Null hypothesis: (AS - AE) ≤ ", -delta, " or (AS - AE) ≥ ", delta))
-  message(paste0("Alternative hypothesis: ", -delta, " < (AS - AE) < ", delta))
-  cat("Note: For equivalence test, paired design is strongly recommended")
+
+  #  (2) ----- calculation modules
+
+  message(paste0("Null hypothesis: AUC1 = AUC2"))
+  message("Alternative hypothesis: AUC1 ≠ AUC2")
 
   ## define correlation coefficients for paired and unpaired designs
 
@@ -99,36 +120,40 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
 
       message("If not specified, r defaults to 0.5")
 
-      rN <- NA
-      rD <- NA
+      r <- ifelse(is.null(NULL), 0.5, r)
 
     } else if (dist == "binorm") {
 
       message("If not specified, rD and rN default to 0.5")
 
-      r <- NA
+      rN <- ifelse(is.null(NULL), 0.5, rN)
+      rD <- ifelse(is.null(NULL), 0.5, rD)
 
     }
 
   } else {
 
     message("For unpaired design, r = rD = rN = 0")
-    r <- 0
-    rN <- rD <- r
+    r <- rN <- rD <- 0
 
   }
 
-
   ## calculate variance function
-  a_S <- get_binorm_params(AUC_S, b_S)$a
-  a_E <- get_binorm_params(AUC_E, b_E)$a
+
+  a_null <- ifelse(is.null(A_null), NA, get_binorm_params(A_null, b_null)$a)
+  a1_alter <- get_binorm_params(A1_alter, b1_alter)$a
+  a2_alter <- get_binorm_params(A2_alter, b2_alter)$a
+
 
   if(dist == "any") {
 
-    VA_delta_A <- AUC_S * (1 - AUC_S) + AUC_E * (1 - AUC_E)-2 * r * sqrt(AUC_S * (1 - AUC_S) * AUC_E * (1 - AUC_E))
-    var_function <- VA_delta_A
+    V0_delta_A <- 2 * A1_alter * (1 - A1_alter) - 2 * r * sqrt(A1_alter^2 * (1-A1_alter)^2)
+    VA_delta_A <- A1_alter * (1 - A1_alter) + A2_alter * (1 - A2_alter) - 2 * r * sqrt(A1_alter * (1-A1_alter) * A2_alter * (1-A2_alter))
 
-  } else if (dist == "binorm") {
+    var_function <- c(V0_delta_A, VA_delta_A)
+
+
+  } else if(dist == "binorm") {
 
     VA <- function(a, b) {
 
@@ -144,8 +169,9 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
 
     }
 
-    VA_S <- VA(a_S, b_S)
-    VA_E <- VA(a_E, b_E)
+    V0_A1 <- V0_A2 <- VA(a_null, b_null)
+    VA_A1 <- VA(a1_alter, b1_alter)
+    VA_A2 <- VA(a2_alter, b2_alter)
 
     C_delta_A <- function(a1, a2, b1, b2, rD, rN, R) {
 
@@ -167,55 +193,53 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
       return(C)
     }
 
-    CA_delta_A <- ifelse(paired, C_delta_A(a_S, a_E, b_S, b_E, rD, rN, R), 0)
+    C0_delta_A <- ifelse(paired, C_delta_A(a_null, a_null, b_null, b_null, rD, rN, R), 0)
+    CA_delta_A <- ifelse(paired, C_delta_A(a1_alter, a2_alter, b1_alter, b2_alter, rD, rN, R), 0)
 
-    VA_delta_A <- VA_S + VA_E - 2 * CA_delta_A
-    var_function <- VA_delta_A
+    V0_delta_A <- V0_A1 + V0_A2 - 2 * C0_delta_A
+    VA_delta_A <- VA_A1 + VA_A2 - 2 * CA_delta_A
+
+    var_function <- c(V0_delta_A, VA_delta_A)
 
   }
-
 
   ## calculate delta
-  if(AUC_S - AUC_E > 0) {
+  delta1 <- abs(A1_alter - A2_alter)
 
-    delta1 <- abs(delta - (AUC_S - AUC_E))
-
-  } else if (AUC_S - AUC_E < 0) {
-
-    delta1 <- abs(delta + (AUC_S - AUC_E))
-
-  } else if (AUC_S - AUC_E == 0){
-
-    beta = beta / 2
-    delta1 <- delta
-
-  }
-
-  ## calculate sample size
+  ## calculate sample size with and without condition
   N <- get_diag_sample(
     var_function = var_function,
     alpha = alpha,
     beta = beta,
     delta = delta1,
-    test_type = "equivalence"
+    test_type = "two_diagnostic"
   )
 
-
-  ## calculate number of patients for each test
   if (paired) {
 
-    n_with_condition <- ceiling(N)
-    n_without_condition <- ceiling(R*N)
-    n_total <- n_with_condition + n_without_condition
+    n_test1_with_condition <- ceiling(N)
+    n_test1_without_condition <- ceiling(R*N)
+    n_test1 <- n_test1_with_condition + n_test1_without_condition
+
+    n_test2_with_condition <- ceiling(N)
+    n_test2_without_condition <- ceiling(R*N)
+    n_test2 <- n_test2_with_condition + n_test2_without_condition
+
+    n_total <- n_test1
 
   } else {
 
-    n_testS_with_condition <- n_testE_with_condition <- ceiling(N)
-    n_testS_without_condition <- n_testE_without_condition <- ceiling(R*N)
-    n_total <- 2*(n_testS_with_condition + n_testS_without_condition)
+    n_test1_with_condition <- ceiling(N)
+    n_test1_without_condition <- ceiling(R*N)
+    n_test1 <- n_test1_with_condition + n_test1_without_condition
+
+    n_test2_with_condition <- ceiling(N)
+    n_test2_without_condition <- ceiling(R*N)
+    n_test2 <- n_test2_with_condition + n_test2_without_condition
+
+    n_total <- n_test1 + n_test2
 
   }
-
 
   #  (3) ----- structured outputs
 
@@ -239,9 +263,9 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
       ## 1.Objective
       htmltools::tags$p(
         htmltools::tags$strong("Objective:"),
-        "To test whether the ",
-        htmltools::tags$strong(style = paste0("color:", ifelse(AUC_E > 0.5, "#E74C3C", "#27AE60"), ";"),"area under the ROC curve"),
-        " of a new experimental test is equivalent to an existing standard test"
+        "To compare the ",
+        htmltools::tags$strong(style = paste0("color:", ifelse(a1_alter > 0.5, "#E74C3C", "#27AE60"), ";"),"area under the ROC curve"),
+        "between two diagnostic tests"
       ),
 
       ## 2.Type
@@ -263,54 +287,62 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
     htmltools::tags$h3("📊 Key Parameters"),
     DT::datatable(
       data.frame(
-        Parameter = c("Target Accuracy for the Existing Test",
-                      "Target Accuracy for the New Test",
-                      "Binominal Parameter the Existing Test",
-                      "Binominal Parameter the New Test",
+        Parameter = c("Target Accuracy in Null Hypothesis",
+                      "Target Accuracy for Test 1",
+                      "Target Accuracy for Test 2",
+                      "Binominal Parameter in Null Hypothesis",
+                      "Binominal Parameter for Test 1",
+                      "Binominal Parameter for Test 2",
                       "Correlation Between Test",
                       "Correlation for Patients with Condition",
                       "Correlation for Patients without Condition",
                       "Confidence Level",
                       "Statistical Power",
-                      "Equivalence Margin",
+                      "Difference in AUC",
                       "Group Allocation"
 
         ),
-        Symbol    = c("AUC_S",
-                      "AUC_E",
-                      "(a_S, b_S)",
-                      "(a_E, b_E)",
+        Symbol    = c("A_null",
+                      "A1_alter",
+                      "A2_alter",
+                      "(a_null, b_null)",
+                      "(a1_alter, b1_alter)",
+                      "(a2_alter, b2_alter)",
                       "r",
                       "rN",
                       "rD",
                       "1 - α",
                       "1 - β",
-                      "(ΔL, ΔU)",
+                      "Δ1",
                       "R"
         ),
-        Value     = c(AUC_S,
-                      AUC_E,
-                      ifelse(is.null(AUC_S),"Not specified", paste0("(", round(a_S,3), ", ", round(b_S,3), ")")),
-                      ifelse(is.null(AUC_E),"Not specified", paste0("(", round(a_E,3), ", ", round(b_E,3), ")")),
+        Value     = c(ifelse(is.null(A_null),"Not specified", A_null),
+                      A1_alter,
+                      A2_alter,
+                      ifelse(is.null(A_null),"Not specified", paste0("(", round(a_null,3), ", ", round(b_null,3), ")")),
+                      paste0("(", round(a1_alter,3), ", ", round(b1_alter,3), ")"),
+                      paste0("(", round(a2_alter,3), ", ", round(b2_alter,3), ")"),
                       ifelse(is.na(r), "Not specified", r),
                       ifelse(is.na(rN), "Not specified", rN),
                       ifelse(is.na(rD), "Not specified", rD),
                       paste0((1-alpha)*100, "%"),
                       paste0((1-beta)*100, "%"),
-                      paste0("(",-delta,", ",delta,")"),
+                      abs(A1_alter-A2_alter),
                       R
         ),
-        Notes     = c("The true area under the ROC curve of the established standard test",
-                      "The true area under the ROC curve of the new experimental test",
-                      "a = (μs_with - μs_without)/σs_with; b = σs_without/σs_with, to determine the shape of ROC of the existing test",
-                      "a = (μe_with - μe_without)/σe_with; b = σe_without/σe_with, to determine the shape of ROC of the new test",
+        Notes     = c("The expected AUC in null hypothesis",
+                      "The expected AUC of test 1 in alternative hypothesis",
+                      "The expected AUC of test 2 in alternative hypothesis",
+                      "a = (μ0_with - μ0_without)/σ0_with; b = σ0_without/σ0_with, to determine the shape of ROC curve in null hypothesis",
+                      "a = (μ1_with - μ1_without)/σ1_with; b = σ1_without/σ1_with, to determine the shape of ROC curve of test 1 in alternative hypothesis",
+                      "a = (μ2_with - μ2_without)/σ2_with; b = σ2_without/σ2_with, to determine the shape of ROC curve of test 2 in alternative hypothesis",
                       "The correlation between the tests",
                       "The correlation of the underlying bivariate binormal distribution for patients with the condition",
                       "The correlation of the underlying bivariate binormal distribution for patients without the condition",
                       "1 - Type I error rate",
                       "1 - Type II error rate",
-                      "The prespecified lower and upper clinical limits for equivalence",
-                      "Ratio of patients with and without the condition"
+                      "Difference between AUC under the alternative hypothesis",
+                      "Ratio of patients without to with the condition"
         )
       ),
 
@@ -337,7 +369,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
         ),
 
         htmltools::tags$p(
-          "For testing the equivalence of area under the ROC curve (AUC) between an established standard test and a new experimental test with a given precision, the null and alternative hypotheses are:"
+          "For comparing area under the ROC curve (AUC) with a given precision, the null and alternative hypotheses are:"
         ),
 
         htmltools::tags$div(
@@ -354,8 +386,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               "display: inline-block;"
             ),
 
-            "$$ H_{0}: (A_{S} - A_{E}) \\leq \\Delta_{L} \\quad\\text{or}\\quad (A_{S} - A_{E}) \\geq \\Delta_{U} $$",
-            "$$ H_{1}: \\Delta_{L} < (A_{S} - A_{E}) < \\Delta_{U} $$"
+            "$$ H_{0}: A_{1} = A_{2} $$",
+            "$$ H_{1}: A_{1} ≠ A_{2} $$"
           )
         ),
 
@@ -363,68 +395,24 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           "The required sample size is calculated using the formula:"
         ),
 
-        if (AUC_S - AUC_E == 0) {
 
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
+        htmltools::tags$div(
+          style = "text-align: center; margin: 10px 0;",
 
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
+          htmltools::tags$p(
+            style = paste(
+              "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+              # "font-size: 1.2em;",
+              "padding: 5px;",
+              "background-color: white;",
+              "border-radius: 5px;",
+              "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+              "display: inline-block;"
+            ),
 
-              "$$ n = \\dfrac{(Z_{\\alpha}+Z_{\\beta/2})^2 V_{A}(\\hat{A}_{S}-\\hat{A}_{E})}{(Δ_{U})^2} $$"
-            )
+            "$$ n = \\dfrac{[Z_{\\alpha/2} \\sqrt{V_{0}(\\hat{A}_{1}-\\hat{A}_{2})} + Z_{\\beta} \\sqrt{V_{A}(\\hat{A}_{1}-\\hat{A}_{2})}]^2}{(Δ_{1})^2} $$"
           )
-
-        } else if(AUC_S - AUC_E > 0) {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              "$$ n = \\dfrac{(Z_{\\alpha}+Z_{\\beta})^2 V_{A}(\\hat{A}_{S}-\\hat{A}_{E})}{[Δ_{U}-(A_{S}-A_{E})]^2} $$"
-            )
-          )
-
-        } else if(AUC_S - AUC_E < 0) {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              "$$ n = \\dfrac{(Z_{\\alpha}+Z_{\\beta})^2 V_{A}(\\hat{A}_{S}-\\hat{A}_{E})}{[Δ_{U}+(A_{S}-A_{E})]^2} $$"
-            )
-          )
-
-        }
-
+        )
 
       ),
 
@@ -443,7 +431,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           htmltools::tagList(
 
             htmltools::tags$p(
-              "The variance function under the alternative hypothesis is calculated through:"
+              "The variance function of the estimated difference in AUC under the null hypothesis is calculated through:"
             ),
 
             htmltools::tags$div(
@@ -460,7 +448,29 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
                   "display: inline-block;"
                 ),
 
-                "$$ V_{A}(\\hat{A}_{S} - \\hat{A}_{E}) = A_{S}(1-A_{S})+A_{E}(1-A_{E}) - 2r\\sqrt{A_{S}(1-A_{S})A_{E}(1-A_{E})} $$"
+                "$$ V_{0}(\\hat{A}_{1}-\\hat{A}_{2}) = A_{1}(1-A_{1}) + A_{1}(1-A_{1}) -2r \\sqrt{A_{1}(1-A_{1})A_{1}(1-A_{1})} $$"
+              )
+            ),
+
+            htmltools::tags$p(
+              "Similarly, the variance function of the estimated difference in AUC under the alternative hypothesis is calculated through:"
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+
+              htmltools::tags$p(
+                style = paste(
+                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                  # "font-size: 1.2em;",
+                  "padding: 5px;",
+                  "background-color: white;",
+                  "border-radius: 5px;",
+                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                  "display: inline-block;"
+                ),
+
+                "$$ V_{A}(\\hat{A}_{1} - \\hat{A}_{2}) = A_{1}(1-A_{1})+A_{2}(1-A_{2}) - 2r\\sqrt{A_{1}(1-A_{1})A_{2}(1-A_{2})} $$"
               )
             )
           )
@@ -470,7 +480,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           htmltools::tagList(
 
             htmltools::tags$p(
-              "The variance function under the alternative hypothesis is calculated through:"
+              "The variance function of the estimated difference in AUC is calculated through:"
             ),
 
             htmltools::tags$div(
@@ -487,7 +497,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
                   "display: inline-block;"
                 ),
 
-                "$$ V(\\hat{A}_{S}-\\hat{A}_{E}) = V(\\hat{A}_{S}) + V(\\hat{A}_{E}) - 2C(\\hat{A}_{S},\\hat{A}_{E}) $$"
+                "$$ V(\\hat{A}_{1}-\\hat{A}_{2}) = V(\\hat{A}_{1}) + V(\\hat{A}_{2}) - 2C(\\hat{A}_{1},\\hat{A}_{2}) $$"
               )
             ),
 
@@ -528,18 +538,20 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
                   style = "text-align: center; margin: 10px 0;",
                   htmltools::tags$p(
                     style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                    paste0("$$ \\hat{C}(\\hat{A}_{S}, \\hat{A}_{E})= \\frac{e^{-[\\frac{a_{S}^2}{2(b_{S}^2+1)}+\\frac{a_{E}^2}{2(b_{E}^2+1)}]}}{2\\pi\\sqrt{(1+b_{S}^2)(1+b_{E}^2)}} \\{ (r_{D} + \\frac{r_{N}b_{S}b_{E}}{R}+\\frac{r_{D}^2a_{S}a_{E}}{2}) + \\frac{a_{S}a_{E}b_{S}^2b_{E}^2(r_{N}^2+Rr_{D}^2)}{2R(1+b_{S}^2)(1+b_{E}^2)} - r_{D}^2a_{S}a_{E}[\\frac{b_{E}^2}{2(1+b_{E}^2)}+\\frac{b_{S}^2}{2(1+b_{S}^2)}] \\} $$")
+                    paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= \\frac{e^{-[\\frac{a_{1}^2}{2(b_{1}^2+1)}+\\frac{a_{2}^2}{2(b_{2}^2+1)}]}}{2\\pi\\sqrt{(1+b_{1}^2)(1+b_{2}^2)}} \\{ (r_{D} + \\frac{r_{N}b_{1}b_{2}}{R}+\\frac{r_{D}^2a_{1}a_{2}}{2}) + \\frac{a_{1}a_{2}b_{1}^2b_{2}^2(r_{N}^2+Rr_{D}^2)}{2R(1+b_{1}^2)(1+b_{2}^2)} - r_{D}^2a_{1}a_{2}[\\frac{b_{2}^2}{2(1+b_{2}^2)}+\\frac{b_{1}^2}{2(1+b_{1}^2)}] \\} $$")
 
                   )
                 ),
 
-                htmltools::tags$p("Specifically, when b", htmltools::tags$sub("S"), " = b", htmltools::tags$sub("E"), " = 1"),
+                htmltools::tags$p(
+                  "Specifically, when b1  = b2 = 1"
+                ),
 
                 htmltools::tags$div(
                   style = "text-align: center; margin: 10px 0;",
                   htmltools::tags$p(
                     style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                    paste0("$$ \\hat{C}(\\hat{A}_{S}, \\hat{A}_{E})= e^{-(a_{S}^2+a_{E}^2)/4} [\\frac{r_{D} + \\frac{r_{N}}{R}+\\frac{r_{D}^2a_{S}a_{E}}{2}}{12.5664} + \\frac{a_{S}a_{E}(\\frac{r_{N}^2}{R}+r_{D}^2)}{100.531} - \\frac{r_{D}^2a_{S}a_{E}}{25.1327}] $$")
+                    paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= e^{-(a_{1}^2+a_{2}^2)/4} [\\frac{r_{D} + \\frac{r_{N}}{R}+\\frac{r_{D}^2a_{1}a_{2}}{2}}{12.5664} + \\frac{a_{1}a_{2}(\\frac{r_{N}^2}{R}+r_{D}^2)}{100.531} - \\frac{r_{D}^2a_{1}a_{2}}{25.1327}] $$")
 
                   )
                 )
@@ -551,7 +563,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
                 style = "text-align: center; margin: 10px 0;",
                 htmltools::tags$p(
                   style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                  paste0("$$ \\hat{C}(\\hat{A}_{S}, \\hat{E}_{2})= 0 $$")
+                  paste0("$$ \\hat{C}(\\hat{A}_{1}, \\hat{A}_{2})= 0 $$")
 
                 )
               )
@@ -579,48 +591,27 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           "First, calculate the Z-score for the given confidence level:"
         ),
 
-        if (AUC_S - AUC_E == 0) {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                "$$z_{\\alpha} = z_{%.2f} = %.3f $$",
-                alpha, qnorm(alpha)
-              ),
-              sprintf(
-                "$$z_{\\beta/2} = z_{%.2f} = %.3f $$",
-                beta, qnorm(beta)
-              )
+        htmltools::tags$div(
+          style = "text-align: center; margin: 10px 0;",
+          htmltools::tags$p(
+            style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+            sprintf(
+              "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
+              alpha/2, qnorm(alpha/2)
+            ),
+            sprintf(
+              "$$z_{\\beta} = z_{%.2f} = %.3f $$",
+              beta, qnorm(beta)
             )
           )
-
-        } else if (AUC_S - AUC_E != 0) {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                "$$z_{\\alpha} = z_{%.3f} = %.3f $$",
-                alpha, qnorm(alpha)
-              ),
-              sprintf(
-                "$$z_{\\beta} = z_{%.3f} = %.3f $$",
-                beta, qnorm(beta)
-              )
-            )
-          )
-
-        },
+        ),
 
 
         if(dist == "any") {
 
           htmltools::tagList(
             htmltools::tags$p(
-              "Next, compute the variance function term under the alternative hypothesis:"
+              "Next, compute the variance function term under the null hypothesis:"
             ),
 
             htmltools::tags$div(
@@ -628,12 +619,11 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ V_{A}(\\hat{A}_{S} - \\hat{A}_{E}) = %.3f \\times (1-%.3f) + %.3f \\times (1-%.3f) - 2 \\times %.3f\\sqrt{%.3f \\times (1-%.3f) \\times %.3f \\times (1-%.3f)} = %.3f $$"),
-                  AUC_S, AUC_S, AUC_E, AUC_E, r, AUC_S, AUC_S, AUC_E, AUC_E, VA_delta_A
+                  paste0("$$ V_{0}(\\hat{A}_{1}-\\hat{A}_{2}) = 2 \\times %.3f \\times (1-%.3f) -2 \\times %.3f \\sqrt{%.3f^2 \\times (1-%.3f)^2} = %.3f $$"),
+                  A1_alter, A1_alter, r, A1_alter, A1_alter, V0_delta_A
                 )
               )
             )
-
           )
 
         } else if(dist == "binorm"){
@@ -641,7 +631,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           htmltools::tagList(
 
             htmltools::tags$p(
-              "Next, compute the variance function of AUC. For the alternative hypothesis, specify that:"
+              "Next, compute the variance function of AUC. For the null hypothesis, specify that:"
             ),
 
             htmltools::tags$div(
@@ -649,12 +639,12 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  "$$ b_{S} = %.3f, a_{S} = \\Phi^{-1}(A_{S}) \\sqrt{1 + b^{S}}  = %.3f $$",
-                  b_S, a_S
+                  "$$a_{1} = a_{2} = a_{null}  = %.3f $$",
+                  a_null
                 ),
                 sprintf(
-                  "$$ b_{E} = %.3f, a_{E} = \\Phi^{-1}(A_{E}) \\sqrt{1 + b^{E}}  = %.3f $$",
-                  b_E, a_E
+                  "$$b_{1} = b_{2} = b_{null} = %.3f $$",
+                  b_null
                 )
               )
             ),
@@ -668,23 +658,11 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ \\hat{V}_{A}(\\hat{A}_{S}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
-                  1/32/pi, a_S, b_S^4+(1+b_S^2)^2, a_S, 2*(1+b_S^2)^2, b_S^4, a_S, 2*b_S^2*(1+b_S^2)^2, R, VA_S
+                  paste0("$$ \\hat{V}_{0}(\\hat{A}_{1}) = \\hat{V}_{0}(\\hat{A}_{2}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
+                  1/32/pi, a_null, b_null^4+(1+b_null^2)^2, a_null, 2*(1+b_null^2)^2, b_null^4, a_null, 2*b_null^2*(1+b_null^2)^2, R, V0_A1
                 )
               )
             ),
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-              htmltools::tags$p(
-                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                sprintf(
-                  paste0("$$ \\hat{V}_{A}(\\hat{A}_{E}) = = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
-                  1/32/pi, a_E, b_E^4+(1+b_E^2)^2, a_E, 2*(1+b_E^2)^2, b_E^4, a_E, 2*b_E^2*(1+b_E^2)^2, R, VA_E
-                )
-              )
-            ),
-
 
             if (paired) {
 
@@ -699,8 +677,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
                   htmltools::tags$p(
                     style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                     sprintf(
-                      paste0("$$ \\hat{C}_{A}(\\hat{A}_{S}, \\hat{A}_{E})= \\frac{e^{-(\\frac{%.3f}{%.3f}+\\frac{%.3f}{%.3f})}}{2 \\pi \\sqrt{%.3f \\times %.3f}} \\{ (%.3f + \\frac{%.3f}{%.3f}+\\frac{%.3f}{2}) + \\frac{%.3f \\times (%.3f^2+%.3f \\times %.3f^2)}{2\\times %.3f \\times %.3f \\times %.3f} - %.3f \\times [\\frac{%.3f^2}{2 \\times (1+%.3f^2)}+\\frac{%.3f^2}{2 \\times (1+%.3f^2)}] \\} = %.3f $$"),
-                      a_S^2, (b_S^2+1), a_E^2, (b_E^2+1), (1+b_S^2), (1+b_E^2), rD, rN*b_S*b_E, R, rD^2*a_S*a_E, a_S*a_E*b_S^2*b_E^2, rN, R, rD, R, (1+b_S^2), (1+b_E^2), rD^2*a_S*a_E, b_E, b_E, b_S, b_S, CA_delta_A
+                      paste0("$$ \\hat{C}_{0}(\\hat{A}_{1}, \\hat{A}_{2})= \\frac{e^{-(\\frac{%.3f}{%.3f}+\\frac{%.3f}{%.3f})}}{2 \\pi \\sqrt{%.3f \\times %.3f}} \\{ (%.3f + \\frac{%.3f}{%.3f}+\\frac{%.3f}{2}) + \\frac{%.3f \\times (%.3f^2+%.3f \\times %.3f^2)}{2\\times %.3f \\times %.3f \\times %.3f} - %.3f \\times [\\frac{%.3f^2}{2 \\times (1+%.3f^2)}+\\frac{%.3f^2}{2 \\times (1+%.3f^2)}] \\} = %.3f $$"),
+                      a1_alter^2, (b1_alter^2+1), a2_alter^2, (b2_alter^2+1), (1+b1_alter^2), (1+b2_alter^2), rD, rN*b1_alter*b2_alter, R, rD^2*a1_alter*a2_alter, a1_alter*a2_alter*b1_alter^2*b2_alter^2, rN, R, rD, R, (1+b1_alter^2), (1+b2_alter^2), rD^2*a1_alter*a2_alter, b2_alter, b2_alter, b1_alter, b1_alter, C0_delta_A
                     )
                   )
                 )
@@ -709,7 +687,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
             },
 
             htmltools::tags$p(
-              "Thus, the variance function under the alternative hypothesis is:"
+              "Thus, the variance function under the null hypothesis is:"
             ),
 
             htmltools::tags$div(
@@ -717,8 +695,80 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ V_{A}(\\hat{A}_{S}-\\hat{A}_{E}) = %.3f + %.3f - 2 \\times %.3f = %.3f $$"),
-                  VA_S, VA_E, CA_delta_A, VA_delta_A
+                  paste0("$$ V_{0}(\\hat{A}_{1}-\\hat{A}_{2}) = %.3f + %.3f - 2 \\times %.3f = %.3f $$"),
+                  V0_A1, V0_A2, C0_delta_A, V0_delta_A
+                )
+              )
+            )
+          )
+
+        },
+
+
+        if(dist == "any") {
+
+          htmltools::tagList(
+            htmltools::tags$p(
+              "Similarly, compute the variance function term under the alternative hypothesis:"
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ V_{A}(\\hat{A}_{1} - \\hat{A}_{2}) = %.3f \\times (1-%.3f) + %.3f \\times (1-%.3f) - 2 \\times %.3f\\sqrt{%.3f \\times (1-%.3f) \\times %.3f \\times (1-%.3f)} = %.3f $$"),
+                  A1_alter, A1_alter, A2_alter, A2_alter, r, A1_alter, A1_alter, A2_alter, A2_alter, VA_delta_A
+                )
+              )
+            )
+          )
+
+        } else if(dist == "binorm") {
+
+          htmltools::tagList(
+            htmltools::tags$p(
+              "For the alternative hypothesis, specify that:"
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  "$$a_{1} = a_{1,alter} = %.3f, a_{2} = a_{2,alter}  = %.3f $$",
+                  a1_alter, a2_alter
+                ),
+                sprintf(
+                  "$$b_{1} = b_{1,alter} = %.3f, b_{2} = b_{2,alter}  = %.3f $$",
+                  b1_alter, b2_alter
+                )
+              )
+            ),
+
+            htmltools::tags$p(
+              "Similarly, compute the variance function term under the alternative hypothesis:"
+            ),
+
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ \\hat{V}_{A}(\\hat{A}_{1}) = %.3f, \\hat{V}_{A}(\\hat{A}_{2}) = %.3f, \\hat{C}_{A}(\\hat{A}_{1}-\\hat{A}_{2}) = %.3f $$"),
+                  VA_A1, VA_A2, CA_delta_A
+                )
+              )
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  paste0("$$ V_{A}(\\hat{A}_{1}-\\hat{A}_{2}) = %.3f + %.3f - 2 \\times %.3f = %.3f  $$"),
+                  VA_A1, VA_A2, CA_delta_A, VA_delta_A
                 )
               )
             )
@@ -731,82 +781,34 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           "Now apply the full formula:"
         ),
 
-        if(AUC_S - AUC_E == 0) {
+        htmltools::tags$div(
+          style = "text-align: center; margin: 15px 0;",
 
-          htmltools::tags$div(
-            style = "text-align: center; margin: 15px 0;",
+          htmltools::tags$p(
+            style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
 
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-
-              htmltools::HTML(
-                sprintf(
-                  "$$n = \\dfrac{[(%.3f) + (%.3f)]^2 \\times %.3f}{(%.3f)^2} ≈ %d$$",
-                  qnorm(alpha),
-                  qnorm(beta),
-                  VA_delta_A,
-                  delta,
-                  N
-                )
+            htmltools::HTML(
+              sprintf(
+                "$$n = \\dfrac{[(%.3f)\\times \\sqrt{%.3f}+(%.3f)\\times \\sqrt{%.3f}]^2}{(%.3f-%.3f)^2} ≈ %d$$",
+                qnorm(alpha/2),
+                V0_delta_A,
+                qnorm(beta),
+                VA_delta_A,
+                A1_alter,
+                A2_alter,
+                N
               )
-
-            )
-
-          )
-        } else if (AUC_S - AUC_E > 0) {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 15px 0;",
-
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-
-              htmltools::HTML(
-                sprintf(
-                  "$$n = \\dfrac{[(%.3f) + (%.3f)]^2 \\times %.3f}{[%.3f - (%.3f-%.3f)]^2} ≈ %d$$",
-                  qnorm(alpha),
-                  qnorm(beta),
-                  VA_delta_A,
-                  delta,
-                  AUC_S,
-                  AUC_E,
-                  N
-                )
-              )
-
             )
 
           )
 
-        } else if(AUC_S - AUC_E < 0) {
+        ),
 
-          htmltools::tags$div(
-            style = "text-align: center; margin: 15px 0;",
-
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-
-              htmltools::HTML(
-                sprintf(
-                  "$$n = \\dfrac{[(%.3f) + (%.3f)]^2 \\times %.3f}{[%.3f + (%.3f-%.3f)]^2} ≈ %d$$",
-                  qnorm(alpha),
-                  qnorm(beta),
-                  VA_delta_A,
-                  delta,
-                  AUC_S,
-                  AUC_E,
-                  N
-                )
-              )
-
-            )
-
-          )
-        },
 
         htmltools::tags$p(
           "Thus,"
         ),
+
 
         if(paired) {
 
@@ -816,8 +818,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{S+} = N_{E+} = n = %d $$"),
-                  n_with_condition
+                  paste0("$$ N_{1+} = N_{2+} = n = %d $$"),
+                  n_test1_with_condition
                 )
               )
             ),
@@ -827,8 +829,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{S-} = N_{E-} = R \\times n = %d $$"),
-                  n_without_condition
+                  paste0("$$ N_{1-} = N_{2-} = R \\times n = %d $$"),
+                  n_test1_without_condition
                 )
               )
             )
@@ -842,8 +844,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{S+} = n = %d, N_{E+} = n = %d$$"),
-                  n_testS_with_condition, n_testE_with_condition
+                  paste0("$$ N_{1+} = n = %d, N_{2+} = n = %d$$"),
+                  n_test1_with_condition, n_test2_with_condition
                 )
               )
             ),
@@ -853,8 +855,8 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
               htmltools::tags$p(
                 style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                 sprintf(
-                  paste0("$$ N_{S-} = R \\times n = %d, N_{E-} = R \\times n = %d$$"),
-                  n_testS_without_condition, n_testE_without_condition
+                  paste0("$$ N_{1-} = R \\times n = %d, N_{2-} = R \\times n = %d$$"),
+                  n_test1_without_condition, n_test2_without_condition
                 )
               )
             )
@@ -900,47 +902,25 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
         ceiling(n_total)
       ),
 
-      if(paired) {
+      htmltools::tags$h4(style = "margin-top: 0;", "Participants for test 1 / test 2 with condition"),
 
-        htmltools::tagList(
-          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S and test E with condition"),
+      htmltools::tags$p(
+        style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+        paste0(n_test1_with_condition," / ", n_test2_with_condition)
+      ),
 
-          htmltools::tags$p(
-            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-            n_with_condition
-          ),
+      htmltools::tags$h4(style = "margin-top: 0;", "Participants for test 1 / test 2 without condition"),
 
-          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S and test E without condition"),
+      htmltools::tags$p(
+        style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
+        paste0(n_test1_without_condition," / ", n_test2_without_condition)
+      ),
 
-          htmltools::tags$p(
-            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-            n_without_condition
-          )
-        )
-
-      } else {
-
-        htmltools::tagList(
-          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S / test E with condition"),
-
-          htmltools::tags$p(
-            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-            paste0(n_testS_with_condition," / ", n_testE_with_condition)
-          ),
-
-          htmltools::tags$h4(style = "margin-top: 0;", "Participants for test S / test E without condition"),
-
-          htmltools::tags$p(
-            style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-            paste0(n_testS_without_condition," / ", n_testE_without_condition)
-          )
-        )
-      },
 
 
       htmltools::tags$p(
         paste0("This provides ", (1-beta)*100, "% power "),
-        paste0(" with ", (1-alpha)*100, "% confidence to test equivalence in area under the ROC curve")
+        paste0(" with ", (1-alpha)*100, "% confidence to detect a difference in area under the ROC curve")
       )
 
     ),
@@ -956,7 +936,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
         style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
         htmltools::tags$strong("1. Method:"),
         htmltools::tags$br(),
-        "Sample size calculations to test equivalence"
+        "Sample size calculations for comparing area under the ROC curve"
       ),
 
       ## 2.Assumptions
@@ -983,9 +963,9 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
       ## 3.Limitations
       htmltools::tags$p(
         style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
-        htmltools::tags$strong("3. Restrictions:"),
+        htmltools::tags$strong("3. Limitations:"),
         htmltools::tags$br(),
-        "Eligible test results are restricted to continuous or ordinal indicators"
+        "Valid on the specific assumptions"
       ),
 
       ## 4.Reference:
@@ -1021,20 +1001,6 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
             onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
             onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
             "doi:https://doi.org/10.1016/s1076-6332(99)80468-1"
-          ),
-
-          htmltools::tags$br(),
-          "[3] Dongsheng T. Two one-sided Tests Procedures in Establishing Therapeutic Equivalence with Binary Clinical endpoints: Fixed Sample Performances and Sample Size Derformination. ",
-          htmltools::tags$em("Journal of Statistical Computation and Simulation."),
-          " 1997;59(3):271-290. ",
-          htmltools::tags$a(
-            href = "doi:https://doi.org/10.1080/00949659708811860",
-            target = "_blank",
-            style = "color: #1a5fb4; text-decoration: none; border-bottom: 1px solid #c1dbf7;
-             transition: border-color 0.3s, color 0.3s;",
-            onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
-            onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
-            "doi:https://doi.org/10.1080/00949659708811860"
           )
 
         )
@@ -1085,22 +1051,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
             onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
             onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
             "doi:https://doi.org/10.1016/s1076-6332(99)80468-1"
-          ),
-
-          htmltools::tags$br(),
-          "[4] Dongsheng T. Two one-sided Tests Procedures in Establishing Therapeutic Equivalence with Binary Clinical endpoints: Fixed Sample Performances and Sample Size Derformination. ",
-          htmltools::tags$em("Journal of Statistical Computation and Simulation."),
-          " 1997;59(3):271-290. ",
-          htmltools::tags$a(
-            href = "doi:https://doi.org/10.1080/00949659708811860",
-            target = "_blank",
-            style = "color: #1a5fb4; text-decoration: none; border-bottom: 1px solid #c1dbf7;
-             transition: border-color 0.3s, color 0.3s;",
-            onmouseover = "this.style.borderBottomColor='#1a5fb4'; this.style.color='#0d4e9b';",
-            onmouseout = "this.style.borderBottomColor='#c1dbf7'; this.style.color='#1a5fb4';",
-            "doi:https://doi.org/10.1080/00949659708811860"
           )
-
 
         )
       }
@@ -1132,7 +1083,7 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
           htmltools::tags$br(),
           "The calculated sample size represents ",
           htmltools::tags$u("the minimum number of participants required "),
-          "to demonstrate that the difference in primary diagnostic performance metrics (e.g., AUC and partial AUC) falls within the equivalence margin in ",
+          "to compare the primary diagnostic performance metrics (e.g., AUC and partial AUC) in ",
           ifelse(paired, "a paired study design " , "an unpaired study design "),
           "under the specified assumptions."
         ),
@@ -1220,36 +1171,16 @@ sample_equivalence_auc <- function(AUC_S, b_S=1, AUC_E, b_E=1, r=NULL, rN=NULL, 
     htmltools::html_print(html_report)
   }
 
-
   # return the structured object
-  if(paired) {
-
-    invisible(
-      structure(
-        list(
-          sample_size = list(n_total = n_total, n_with_condition = n_with_condition, n_without_condition = n_without_condition),
-          parameters = list(AUC_S = AUC_S, AUC_E = AUC_E, alpha = alpha, beta = beta, r = r, rN = rN, rD = rD, R = R, paired = paired),
-          html_report = html_report
-        ),
-        class = "diag_sample_size_html"
-      )
+  invisible(
+    structure(
+      list(
+        sample_size = list(n_total = n_total, n_test1 = n_test1, n_test2 = n_test2, n_test1_with_condition = n_test1_with_condition, n_test1_without_condition = n_test1_without_condition, n_test2_with_condition = n_test2_with_condition, n_test2_without_condition = n_test2_without_condition),
+        parameters = list(A_null = A_null, A1_alter = A1_alter, A2_alter = A2_alter, alpha = alpha, beta = beta, r = r, rN = rN, rD = rD, R = R, paired = paired),
+        html_report = html_report
+      ),
+      class = "diag_sample_size_html"
     )
-
-  } else {
-
-    invisible(
-      structure(
-        list(
-          sample_size = list(n_total = n_total, n_testS_with_condition = n_testS_with_condition, n_testS_without_condition = n_testS_without_condition,
-                             n_testE_with_condition = n_testE_with_condition, n_testE_without_condition = n_testE_without_condition),
-          parameters = list(AUC_S = AUC_S, AUC_E = AUC_E, alpha = alpha, beta = beta, r = r, rN = rN, rD = rD, R = R, paired = paired),
-          html_report = html_report
-        ),
-        class = "diag_sample_size_html"
-      )
-    )
-
-  }
-
+  )
 
 }

@@ -39,8 +39,8 @@ get_diag_sample <- function(var_function, alpha=0.05, beta=NULL, delta, test_typ
     stop("'delta' must be a single positive numeric value.")
   }
 
-  if (!is.character(test_type) || !(test_type %in% c("one_diagnostic", "two_diagnostic", "equivalence", "inferiority"))) {
-    stop("'test_type' must be one of 'one_diagnostic', 'two_diagnostic', 'equivalence', or 'inferiority'.")
+  if (!is.character(test_type) || !(test_type %in% c("one_diagnostic", "two_diagnostic", "equivalence", "non_inferiority"))) {
+    stop("'test_type' must be one of 'one_diagnostic', 'two_diagnostic', 'equivalence', or 'non_inferiority'.")
   }
 
   if (test_type != "one_diagnostic" && (is.null(beta) || !is.numeric(beta) || length(beta) != 1|| beta <= 0 || beta >= 1)) {

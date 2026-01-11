@@ -1,18 +1,15 @@
 #' Sample Size Calculator for Diagnostic Tests
 #'
-#'Calculate the required sample size for testing the hypothesis that the Area Under the ROC Curve of a new test is equal to a particular value.
+#' Calculate the required sample size for estimating the Area Under the ROC Curve (AUC) of a diagnostic test.
 #'
-#' @title Sample Size Calculation for Fixed AUC Comparison
-#' @description Computes the required sample size for testing whether the AUC is equal to a specific value.
-#' @param A_null (numeric): AUC under the null hypothesis (default: NULL).
-#' @param A_alter (numeric): AUC under the alternative hypothesis (default: NULL).
-#' @param b (numeric): Ratio of the standard deviations of the distributions of results for patients without versus with the condition, σ_without/σ_with (default: 1).
-#' @param alpha (numeric): Significance level (0 < alpha < 1).
-#' @param beta (numeric): Type II error (0 < beta < 1, power = 1 - beta).
-#' @param alternative (character): Type of test, must be one of "less", "greater", or "two.sided" (default: "two.sided").
-#' @param R (numeric): Ratio of patients with and without the condition (default: 1).
+#' @param A (numeric): Expected area under the ROC curve.
+#' @param b (numeric): Ratio of the standard deviations of the distributions of test results for patients without versus with the condition, σ_without/σ_with (default: 1).
+#' @param alpha (numeric): Significance level (default: 0.05).
+#' @param beta (numeric): Type II error rate (default: NULL).
+#' @param L (numeric): The desired length of one-half of the (1-α)×100% confidence interval for AUC.
+#' @param R (numeric): Ratio of patients without to with the condition (default: 1).
 #' @param dist (character): The assumption for choosing the variance function (default: "any"):
-#'   - `"any"`: Applicable for all distributions.
+#'   - `"any"`: Applicable for tests with any underlying distributions.
 #'   - `"exp"`: Assume that the unobserved, underlying test results follow an exponential distribution, but the observed test results, either continuous or ordinal, do not necessarily have an exponential distribution
 #'   - `"binorm"`: Assume that the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution
 #'   - `"obs_binorm"`: Assume that the observed test results are on a truly continuous scale and follow a binormal distribution or can be transformed to a binormal distribution.
@@ -20,41 +17,33 @@
 #'   - `sample_size` (list): Required sample size.
 #'   - `parameters` (list): Input parameters.
 #'   - `html_report` (html): Sample size calculation report.
-#' @import stats
 #' @examples
-#' n <- sample_hypotest_auc(A_null=0.5, A_alter=0.8, alpha=0.05, beta=0.2, alternative="two.sided", R=1, dist="binorm")
-#' print(n)
-#' @export
-sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternative="two.sided", R=1, dist="any") {
+#' lapply(X=c("any", "exp", "binorm", "obs_binorm"), FUN=function(dist) sample_estimate_auc(A=0.8, alpha=0.05, beta=0.2, L=0.1, R=1, dist=dist))
+sample_estimate_auc <- function(A, b=1, alpha=0.05, beta=NULL, L, R=1, dist="any") {
 
 
   #  (1) ----- validate inputs
-
-  if (!is.numeric(A_null) || length(A_null) != 1 || A_null <= 0 || A_null >= 1) {
-    stop("'A_null' must be a single numeric value in (0, 1).")
+  if (!is.numeric(A) || length(A) != 1 || A <= 0 || A >= 1) {
+    stop("'A' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(A_alter) || length(A_alter) != 1  || A_alter <= 0 || A_alter >= 1) {
-    stop("'A_alter' must be a single numeric value in (0, 1).")
-  }
-
-  if (!is.numeric(b) || length(b) != 1  || b <= 0) {
+  if (!is.numeric(b) || length(b) != 1 || b <= 0) {
     stop("'b' must be a single positive numeric value.")
   }
 
-  if (!is.numeric(alpha) || length(alpha) != 1  || alpha <= 0 || alpha >= 1) {
+  if (!is.numeric(alpha) || length(alpha) != 1 || alpha <= 0 || alpha >= 1) {
     stop("'alpha' must be a single numeric value in (0, 1).")
   }
 
-  if (!is.numeric(beta) || length(beta) != 1  || beta <= 0 || beta >= 1) {
-    stop("'beta' must be a single numeric value in (0, 1).")
+  if (!is.null(beta) && (!is.numeric(beta) || length(beta) != 1 || beta <= 0 || beta >= 1)) {
+    stop("'beta' must be a single numeric value in (0, 1), or NULL.")
   }
 
-  if (!is.character(alternative) || length(alternative) != 1  || !(alternative %in% c("two.sided", "greater", "less"))) {
-    stop("'alternative' must be one of 'two.sided', 'greater' or 'less'.")
+  if (!is.numeric(L) || length(L) != 1 || L <= 0 || L > 0.5) {
+    stop("'L' must be a numeric value in (0, 0.5).")
   }
 
-  if (!is.numeric(R) || length(R) != 1  || R <= 0) {
+  if (!is.numeric(R) || length(R) != 1 || R <= 0) {
     stop("'R' must be a single positive numeric value.")
   }
 
@@ -62,98 +51,48 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
     stop("'dist' must be one of 'any', 'exp', 'binorm' or 'obs_binorm'.")
   }
 
+
   #  (2) ----- calculation modules
 
-  message(paste0("Null hypothesis: A = ", A_null))
-
-  if(alternative == "two.sided") {
-
-    message(paste0("Alternative hypothesis: A ≠ "), A_null)
-
-  } else if(alternative == "greater") {
-
-    message(paste0("Alternative hypothesis: A > "), A_null)
-
-  } else if(alternative == "less") {
-
-    message(paste0("Alternative hypothesis: A < "), A_null)
-  }
-
   ## calculate variance function
-
-  A0 <- A_null
-  A1 <- A_alter
-  a0 <- get_binorm_params(A0, b)$a
-  a1 <- get_binorm_params(A1, b)$a
-
-  # V0_theta <- (0.0099) * exp(-a0^2 / 2)*((5 * a0^2 + 8)+(a0^2 + 8) / R)
-  # VA_theta <- (0.0099) * exp(-aA^2 / 2)*((5 * aA^2 + 8)+(aA^2 + 8) / R)
-
   var_function <- switch(
     dist,
     "any" = {
       method <- "Sample size method for estimating AUC by Blume (2009)"
-      V0_theta <- A_null * (1 - A_null)
-      VA_theta <- A_alter * (1 - A_alter)
-      c(V0_theta, VA_theta)
+      A * (1 - A)
     },
     "exp" = {
       method <- "Sample size method for estimating AUC by Hanley and McNeil (1982)"
-      V0_theta <- A_null / (2 - A_null) / R + 2 * A_null^2 / (1 + A_null) - A_null^2 * (1 / R + 1)
-      VA_theta <- A_alter / (2 - A_alter) / R + 2 * A_alter^2 / (1 + A_alter) - A_alter^2 * (1 / R + 1)
-      c(V0_theta, VA_theta)
+      A / (2 - A) / R + 2 * A^2 / (1 + A) - A^2 * (1 / R + 1)
     },
     "binorm" = {
       method <- "Sample size method for estimating AUC by Obuchowski (1994)"
+      a <- get_binorm_params(A, b)$a
 
-      expr1 <- exp(- a0^2 / 2 / (1 + b^2))
+      expr1 <- exp(- a^2 / 2 / (1 + b^2))
       expr2 <- 1 + b^2
-      f0 <- expr1 * (2 * pi * expr2)^(-1/2)
-      g0 <- -expr1 * (a0*b) * (2 * pi * expr2^3)^(-1/2)
 
-      expr1 <- exp(- a1^2 / 2 / (1 + b^2))
-      expr2 <- 1 + b^2
-      f1 <- expr1 * (2 * pi * expr2)^(-1/2)
-      g1 <- -expr1 * (a1*b) * (2 * pi * expr2^3)^(-1/2)
+      f <- expr1 * (2 * pi * expr2)^(-1/2)
+      g <- -expr1 * (a*b) * (2 * pi * expr2^3)^(-1/2)
 
       # (0.0099) * exp(-a^2 / 2) * ((5 * a^2 + 8) + (a^2 + 8) / R) # if b=1
-      V0_theta <- f0^2 * (1 + b^2 / R + a0^2 / 2) + g0^2 * (b^2 * (1 + R)/ 2 / R)
-      VA_theta <- f1^2 * (1 + b^2 / R + a1^2 / 2) + g1^2 * (b^2 * (1 + R)/ 2 / R)
-
-      c(V0_theta, VA_theta)
+      f^2 * (1 + b^2 / R + a^2 / 2) + g^2 * (b^2 * (1 + R)/ 2 / R)
     },
     "obs_binorm" = {
       method <- "Sample size method for estimating AUC by Obuchowski and McClish (1997)"
+      a <- get_binorm_params(A, b)$a
 
-      expr1 <- exp(- a0^2 / 2 / (1 + b^2))
+      expr1 <- exp(- a^2 / 2 / (1 + b^2))
       expr2 <- 1 + b^2
-      f0 <- expr1 * (2 * pi * expr2)^(-1/2)
-      g0 <- -expr1 * (a0*b) * (2 * pi * expr2^3)^(-1/2)
 
-      expr1 <- exp(- a1^2 / 2 / (1 + b^2))
-      expr2 <- 1 + b^2
-      f1 <- expr1 * (2 * pi * expr2)^(-1/2)
-      g1 <- -expr1 * (a1*b) * (2 * pi * expr2^3)^(-1/2)
+      f <- expr1 * (2 * pi * expr2)^(-1/2)
+      g <- -expr1 * (a*b) * (2 * pi * expr2^3)^(-1/2)
 
       # (0.0099) * exp(-a^2 / 2) * ((5 * a^2 + 8) + (a^2 + 8) / R) - 0.0398 * a^2 * exp(-a^2 / 2) # if b = 1
-      V0_theta <- f0^2 * (1 + b^2 / R + a0^2 / 2) + g0^2 * (b^2 * (1 + R)/ 2 / R) + f0*g0*a0*b
-      VA_theta <- f1^2 * (1 + b^2 / R + a1^2 / 2) + g1^2 * (b^2 * (1 + R)/ 2 / R) + f1*g1*a1*b
-
-      c(V0_theta, VA_theta)
+      f^2 * (1 + b^2 / R + a^2 / 2) + g^2 * (b^2 * (1 + R)/ 2 / R) + f*g*a*b
 
     },
     stop("Invalid 'dist' value. Use 'any', 'exp', 'binorm', or 'obs_binorm'.")
-  )
-
-  delta <- abs(A_null - A_alter)
-
-  ## adjust alpha for alternative test
-  alpha <- switch(
-    alternative,
-    "less" = 2 * alpha,
-    "greater" = 2 * alpha,
-    "two.sided" = alpha,
-    stop("Invalid 'alternative' value. Use 'less', 'greater', or 'two.sided'.")
   )
 
   ## calculate sample size
@@ -161,19 +100,26 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
     var_function = var_function,
     alpha = alpha,
     beta = beta,
-    delta = delta,
-    test_type = "two_diagnostic"
+    delta = L,
+    test_type = "one_diagnostic"
   )
 
-  ## calculate patients with and without condition
-  n_with_condition <- ceiling(N)
-  n_without_condition <- ceiling(N*R)
+  ## calculate number of patients with and without the condition
+  if (dist == "any" & R < 1) {
+
+    n_with_condition <- ceiling(N*R)
+    n_without_condition <- ceiling(N)
+
+  } else {
+
+    n_with_condition <- ceiling(N)
+    n_without_condition <- ceiling(N*R)
+  }
+
   n_total <- n_with_condition + n_without_condition
 
 
   #  (3) ----- structured outputs
-
-  ## method
   html_report <- htmltools::tags$div(
     class = "clinical-report",
     style = "font-family: Arial; max-width: 800px; margin: auto;",
@@ -194,9 +140,9 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
       ## 1.Objective
       htmltools::tags$p(
         htmltools::tags$strong("Objective:"),
-        "To test whether the ",
-        htmltools::tags$strong(style = paste0("color:", ifelse(A_alter > 0.5, "#E74C3C", "#27AE60"), ";"),"area under the ROC curve"),
-        " of a new diagnostic test is equal to a pre-determined value"
+        "To evaluate the ",
+        htmltools::tags$strong(style = paste0("color:", ifelse(A > 0.5, "#E74C3C", "#27AE60"), ";"),"area under the ROC curve"),
+        "of a new diagnostic test"
       ),
 
       ## 2.Type
@@ -218,33 +164,33 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
     htmltools::tags$h3("📊 Key Parameters"),
     DT::datatable(
       data.frame(
-        Parameter = c("Target Accuracy under Null Hypothesis",
-                      "Target Accuracy under Alternative Hypothesis",
+        Parameter = c("Target Accuracy",
                       "Binominal Parameter",
                       "Confidence Level",
                       "Statistical Power",
+                      "Margin of Error",
                       "Group Allocation"
         ),
-        Symbol    = c("A0",
-                      "A1",
-                      "(a0, a1, b)",
+        Symbol    = c("A",
+                      "(a, b)",
                       "1 - α",
                       "1 - β",
+                      "± L",
                       "R"
         ),
-        Value     = c(paste0(round(A_null*100, 1), "%"),
-                      paste0(round(A_alter*100, 1), "%"),
-                      ifelse(dist %in% c("binorm","obs_binorm"), paste0("(", round(a0,3), ", ", round(a1,3), ", ", round(b,3), ")"), "Not specified"),
+        Value     = c(A,
+                      ifelse(dist %in% c("binorm","obs_binorm"), paste0("(", round(a,3), ", ", round(b,3), ")"), "Not specified"),
                       paste0((1-alpha)*100, "%"),
-                      paste0((1-beta)*100, "%"),
+                      ifelse(is.null(beta), "Not specified", paste0((1-beta)*100, "%")),
+                      paste0("±", L*100, "%"),
                       R
         ),
-        Notes     = c("Assumed area under the ROC curve under null hypothesis",
-                      "Assumed area under the ROC curve under alternative hypothesis",
-                      "a0 = (μ0_with - μ0_without)/σ_with; a1 = (μ1_with - μ1_without)/σ_with; b = σ_without/σ_with",
+        Notes     = c("Desired AUC",
+                      "a = (μ_with - μ_without)/σ_with; b = σ_without/σ_with",
                       "1 - Type I error rate",
                       "1 - Type II error rate",
-                      "Ratio of patients with and without the condition"
+                      "Half-width of CI",
+                      "Ratio of patients without to with the condition"
         )
       ),
 
@@ -270,11 +216,10 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
         ),
 
         htmltools::tags$p(
-          "For testing whether the area under the ROC curve (AUC) is equal to a pre-determined value, the null and alternative hypotheses are:"
+          "For estimating area under the ROC curve (AUC) with a given precision, the required sample size is calculated using the formula:"
         ),
 
-        if(alternative == "two.sided") {
-
+        if (is.null(beta)) {
           htmltools::tags$div(
             style = "text-align: center; margin: 10px 0;",
 
@@ -289,73 +234,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                 "display: inline-block;"
               ),
 
-              "$$ H_{0}: A = A_{0} $$",
-              "$$ H_{1}: A ≠ A_{0} $$"
-            )
-          )
-
-        } else if(alternative == "greater") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              "$$ H_{0}: A = A_{0} $$",
-              "$$ H_{1}: A > A_{0} $$"
-            )
-          )
-        } else if(alternative == "less") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              "$$ H_{0}: A = A_{0} $$",
-              "$$ H_{1}: A < A_{0} $$"
-            )
-          )
-        },
-
-        htmltools::tags$p(
-          "The required sample size is calculated using the formula:"
-        ),
-
-        if(alternative == "two.sided") {
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              "$$ n = \\dfrac{[Z_{\\alpha/2}\\sqrt{V_{0}(\\hat{A})}+Z_{\\beta} \\sqrt{V_{A}(\\hat{A})}]^2}{(A_{0}-A_{1})^2} $$"
+              "$$ n = \\dfrac{[Z_{\\alpha/2} \\sqrt{V(\\hat{A})}]^2}{L^2} $$"
             )
           )
 
@@ -374,9 +253,10 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                 "display: inline-block;"
               ),
 
-              "$$ n = \\dfrac{[Z_{\\alpha}\\sqrt{V_{0}(\\hat{A})}+Z_{\\beta} \\sqrt{V_{A}(\\hat{A})}]^2}{(A_{0}-A_{1})^2} $$"
+              "$$ n = \\dfrac{[(Z_{\\alpha/2}+Z_{\\beta}) \\sqrt{V(\\hat{A})}]^2}{L^2} $$"
             )
           )
+
         }
 
       ),
@@ -391,7 +271,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
         ),
 
         htmltools::tags$p(
-          "The variance function in the null hypothsis is calculated through:"
+          "The variance function is calculated through:"
         ),
 
         if(dist=="exp") {
@@ -410,7 +290,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                 "display: inline-block;"
               ),
 
-              paste0("$$ \\hat{V_{0}}(\\hat{A})=\\dfrac{A_{0}}{R(2-A_{0})}+\\dfrac{2A_{0}^2}{1+A_{0}}-A_{0}^2(\\dfrac{1}{R}+1) $$")
+              paste0("$$ \\hat{V}(\\hat{A})=\\dfrac{A}{R(2-A)}+\\dfrac{2A^2}{1+A}-A^2(\\dfrac{1}{R}+1) $$")
             )
           )
 
@@ -432,7 +312,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                   "display: inline-block;"
                 ),
 
-                paste0("$$ \\hat{V_{0}}(\\hat{A})= \\frac{e^{-a_{0}^2/2}}{4\\pi(1+b^2)^3} \\times\\{a_{0}^2[b^4+(1+b^2)^2]+2(1+b^2)^2+\\frac{a_{0}^2b^4+2b^2(1+b^2)^2}{R}\\} $$")
+                paste0("$$ \\hat{V}(\\hat{A})= \\frac{e^{-a^2/2}}{4\\pi(1+b^2)^3} \\times\\{a^2[b^4+(1+b^2)^2]+2(1+b^2)^2+\\frac{a^2b^4+2b^2(1+b^2)^2}{R}\\} $$")
               )
             ),
 
@@ -454,7 +334,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                   "display: inline-block;"
                 ),
 
-                paste0("$$ \\hat{V_{0}}(\\hat{A})=0.0099 \\times e^{-a_{0}^2/2} \\times(5a_{0}^2+8+\\dfrac{a_{0}^2+8}{R}) $$")
+                paste0("$$ \\hat{V}(\\hat{A})=0.0099 \\times e^{-a^2/2} \\times(5a^2+8+\\dfrac{a^2+8}{R}) $$")
               )
             )
           )
@@ -475,7 +355,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                 "display: inline-block;"
               ),
 
-              paste0("$$ \\hat{V_{0}}(\\hat{A})=A_{0}(1-A_{0}) $$")
+              paste0("$$ \\hat{V}(\\hat{A})=A(1-A) $$")
             )
           )
 
@@ -497,7 +377,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                   "display: inline-block;"
                 ),
 
-                paste0("$$ \\hat{V_{0}}(\\hat{A})=\\frac{e^{-a_{0}^2/2}}{4\\pi(1+b^2)^3} \\times[a_{0}^2+2(1+b^2)^2+\\frac{a_{0}^2b^4+2b^2(1+b^2)^2}{R}] $$")
+                paste0("$$ \\hat{V}(\\hat{A})=\\frac{e^{-a^2/2}}{4\\pi(1+b^2)^3} \\times[a^2+2(1+b^2)^2+\\frac{a^2b^4+2b^2(1+b^2)^2}{R}] $$")
               )
             ),
 
@@ -519,150 +399,14 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
                   "display: inline-block;"
                 ),
 
-                paste0("$$ \\hat{V_{0}}(\\hat{A})=0.0099 \\times e^{-a_{0}^2/2} \\times(5a_{0}^2+8+\\frac{a_{0}^2+8}{R}) $$")
-              )
-            )
-
-          )
-
-        },
-
-        htmltools::tags$p(
-          "Similarly, the variance function in the alternative hypothsis is calculated through:"
-        ),
-
-        if(dist=="exp") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              paste0("$$ \\hat{V_{A}}(\\hat{A})=\\dfrac{A_{1}}{R(2-A_{1})}+\\dfrac{2A_{1}^2}{1+A_{1}}-A_{1}^2(\\dfrac{1}{R}+1) $$")
-            )
-          )
-
-        } else if(dist=="binorm") {
-
-          htmltools::tagList(
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V_{A}}(\\hat{A})= \\frac{e^{-a_{1}^2/2}}{4\\pi(1+b^2)^3} \\times\\{a_{1}^2[b^4+(1+b^2)^2]+2(1+b^2)^2+\\frac{a_{1}^2b^4+2b^2(1+b^2)^2}{R}\\} $$")
-              )
-            ),
-
-            htmltools::tags$p(
-              "Specifically, when b = 1"
-            ),
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V_{A}}(\\hat{A})=0.0099 \\times e^{-a_{1}^2/2} \\times(5a_{1}^2+8+\\dfrac{a_{1}^2+8}{R}) $$")
-              )
-            )
-          )
-
-        } else if(dist=="any") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-
-            htmltools::tags$p(
-              style = paste(
-                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                # "font-size: 1.2em;",
-                "padding: 5px;",
-                "background-color: white;",
-                "border-radius: 5px;",
-                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                "display: inline-block;"
-              ),
-
-              paste0("$$ \\hat{V_{A}}(\\hat{A})=A_{1}(1-A_{1}) $$")
-            )
-          )
-
-        } else if(dist=="obs_binorm") {
-
-          htmltools::tagList(
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V_{A}}(\\hat{A})=\\frac{e^{-a_{1}^2/2}}{4\\pi(1+b^2)^3} \\times[a_{1}^2+2(1+b^2)^2+\\frac{a_{1}^2b^4+2b^2(1+b^2)^2}{R}] $$")
-              )
-            ),
-
-            htmltools::tags$p(
-              "Specifically, when b = 1"
-            ),
-
-            htmltools::tags$div(
-              style = "text-align: center; margin: 10px 0;",
-
-              htmltools::tags$p(
-                style = paste(
-                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                  # "font-size: 1.2em;",
-                  "padding: 5px;",
-                  "background-color: white;",
-                  "border-radius: 5px;",
-                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                  "display: inline-block;"
-                ),
-
-                paste0("$$ \\hat{V_{A}}(\\hat{A})=0.0099 \\times e^{-a_{1}^2/2} \\times(5a_{1}^2+8+\\frac{a_{1}^2+8}{R}) $$")
+                paste0("$$ \\hat{V}(\\hat{A})=0.0099 \\times e^{-a^2/2} \\times(5a^2+8+\\frac{a^2+8}{R}) $$")
               )
             )
 
           )
 
         }
+
 
       ),
 
@@ -680,8 +424,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
           "First, calculate the Z-score for the given confidence level:"
         ),
 
-        if(alternative == "two.sided") {
-
+        if(is.null(beta)) {
           htmltools::tags$div(
             style = "text-align: center; margin: 10px 0;",
             htmltools::tags$p(
@@ -689,10 +432,6 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
               sprintf(
                 "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
                 alpha/2, qnorm(alpha/2)
-              ),
-              sprintf(
-                "$$z_{\\beta} = z_{%.2f} = %.3f $$",
-                beta, qnorm(beta)
               )
             )
           )
@@ -702,7 +441,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
             htmltools::tags$p(
               style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
               sprintf(
-                "$$z_{\\alpha} = z_{%.3f} = %.3f $$",
+                "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
                 alpha/2, qnorm(alpha/2)
               ),
               sprintf(
@@ -727,8 +466,8 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
             htmltools::tags$p(
               style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
               sprintf(
-                paste0("$$ \\hat{V_{0}}(\\hat{A}) = \\dfrac{%.3f}{%.3f \\times (2-%.3f)}+\\dfrac{2\\times%.3f^2}{1+%.3f}-%.3f^2\\times(\\dfrac{1}{%.3f}+1)= %.3f $$"),
-                A0, R, A0, A0, A0, A0, R, var_function[1]
+                paste0("$$ \\hat{V}(\\hat{A}) = \\dfrac{%.3f}{%.3f \\times (2-%.3f)}+\\dfrac{2\\times%.3f^2}{1+%.3f}-%.3f^2\\times(\\dfrac{1}{%.3f}+1)= %.3f $$"),
+                A, R, A, A, A, A, R, var_function
               )
             )
           )
@@ -741,8 +480,8 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
             htmltools::tags$p(
               style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
               sprintf(
-                paste0("$$ \\hat{V_{0}}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
-                1/32/pi, a0, b^4+(1+b^2)^2, a0, 2*(1+b^2)^2, b^4, a0, 2*b^2*(1+b^2)^2, R, var_function[1]
+                paste0("$$ \\hat{V}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
+                1/32/pi, a, b^4+(1+b^2)^2, a, 2*(1+b^2)^2, b^4, a, 2*b^2*(1+b^2)^2, R, var_function
               )
             )
           )
@@ -754,8 +493,8 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
             htmltools::tags$p(
               style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
               sprintf(
-                paste0("$$ \\hat{V_{0}}(\\hat{A}) =%.3f\\times(1-%.3f) = %.3f $$"),
-                A0, A0, var_function[1]
+                paste0("$$ \\hat{V}(\\hat{A}) =%.3f\\times(1-%.3f) = %.3f $$"),
+                A, A, var_function
               )
             )
           )
@@ -767,95 +506,61 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
             htmltools::tags$p(
               style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
               sprintf(
-                paste0("$$ \\hat{V_{0}}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f  $$"),
-                1/32/pi, a0, a0, 2*(1+b^2)^2, b^4, a0, 2*b^2*(1+b^2)^2, R, var_function[1]
+                paste0("$$ \\hat{V}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f  $$"),
+                1/32/pi, a, a, 2*(1+b^2)^2, b^4, a, 2*b^2*(1+b^2)^2, R, var_function
               )
             )
           )
 
         },
 
-        if(dist=="exp") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ \\hat{V_{A}}(\\hat{A}) = \\dfrac{%.3f}{%.3f \\times (2-%.3f)}+\\dfrac{2\\times%.3f^2}{1+%.3f}-%.3f^2\\times(\\dfrac{1}{%.3f}+1)= %.3f $$"),
-                A1, R, A1, A1, A1, A1, R, var_function[2]
-              )
-            )
-          )
-
-
-        } else if(dist=="binorm") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ \\hat{V_{A}}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f \\times%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f $$"),
-                1/32/pi, a1, b^4+(1+b^2)^2, a1, 2*(1+b^2)^2, b^4, a1, 2*b^2*(1+b^2)^2, R, var_function[2]
-              )
-            )
-          )
-
-        } else if(dist=="any") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ \\hat{V_{A}}(\\hat{A}) =%.3f\\times(1-%.3f) = %.3f $$"),
-                A1, A1, var_function[2]
-              )
-            )
-          )
-
-        } else if(dist=="obs_binorm") {
-
-          htmltools::tags$div(
-            style = "text-align: center; margin: 10px 0;",
-            htmltools::tags$p(
-              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-              sprintf(
-                paste0("$$ \\hat{V_{A}}(\\hat{A}) = %.4f \\times e^{-%.3f^2/2} \\times (%.3f^2+ %.3f +\\dfrac{%.3f \\times %.3f^2+%.3f}{%.3f})= %.3f  $$"),
-                1/32/pi, a1, a1, 2*(1+b^2)^2, b^4, a1, 2*b^2*(1+b^2)^2, R, var_function[2]
-              )
-            )
-          )
-
-        },
 
         htmltools::tags$p(
           "Now apply the full formula:"
         ),
 
-        htmltools::tags$div(
-          style = "text-align: center; margin: 15px 0;",
+        if(is.null(beta)) {
+          htmltools::tags$div(
+            style = "text-align: center; margin: 15px 0;",
 
-          htmltools::tags$p(
-            style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
 
-            htmltools::HTML(
-              sprintf(
-                "$$n = \\dfrac{[(%.3f) \\times \\sqrt{%.3f} + (%.3f) \\times \\sqrt{%.3f}]^2}{(%.3f-%.3f)^2} ≈ %d$$",
-                qnorm(alpha/2),
-                var_function[1],
-                qnorm(beta),
-                var_function[2],
-                A0,
-                A1,
-                N
+              htmltools::HTML(
+                sprintf(
+                  "$$n = \\dfrac{[(%.3f)\\times \\sqrt{%.3f}]^2}{(%.3f)^2} ≈ %d$$",
+                  qnorm(alpha/2),
+                  var_function,
+                  L,
+                  N
+                )
               )
+
             )
 
           )
+        } else {
+          htmltools::tags$div(
+            style = "text-align: center; margin: 15px 0;",
 
-        ),
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+
+              htmltools::HTML(
+                sprintf(
+                  "$$n = \\dfrac{\\{[(%.3f)+(%.3f)]\\times \\sqrt{%.3f}\\}^2}{(%.3f)^2} ≈ %d$$",
+                  qnorm(alpha/2),
+                  qnorm(beta),
+                  var_function,
+                  L,
+                  N
+                )
+              )
+
+            )
+
+          )
+        },
 
         htmltools::tags$p(
           "Thus,"
@@ -920,9 +625,10 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
       ),
 
       htmltools::tags$p(
-        paste0("This provides ", (1-alpha)*100, "% confidence with ", (1-beta)*100, "% power that the area under the ROC curve is equal to a pre-determined value")
+        paste0("This provides ", (1-alpha)*100, "% confidence that the estimated AUC"),
+        paste0(" will be within ±", L*100, "% of the true value"),
+        ifelse(!is.null(beta), paste0(" with ", (1-beta)*100, "% power"), "")
       )
-
     ),
 
 
@@ -936,7 +642,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
         style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
         htmltools::tags$strong("1. Method:"),
         htmltools::tags$br(),
-        "Sample size calculations for hypothesis testing of area under the ROC curve"
+        "Sample size calculations for estimating area under the ROC curve"
       ),
 
       ## 2.Assumptions
@@ -978,7 +684,7 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
           htmltools::tags$br(),
           "Assume that the observed test results are on a truly continuous scale and follow a binormal distribution or can be transformed to a binormal distribution",
 
-        )
+          )
 
       },
 
@@ -986,9 +692,9 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
       ## 3.Limitations
       htmltools::tags$p(
         style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
-        htmltools::tags$strong("3. Restrictions:"),
+        htmltools::tags$strong("3. Limitations:"),
         htmltools::tags$br(),
-        "Eligible test results are restricted to binary outcomes or continuous/ordinal indicators that counld been categorized into a binary variable based on a predefined threshold"
+        "Valid on the specific assumptions"
       ),
 
       ## 4.Reference:
@@ -1231,12 +937,12 @@ sample_hypotest_auc <- function(A_null, A_alter, b=1, alpha=0.05, beta, alternat
     structure(
       list(
         sample_size = list(n_total = n_total, n_with_condition = n_with_condition, n_without_condition = n_without_condition),
-        parameters = list(A0 = A_null, A1 = A_alter, b=b, alpha = alpha, beta = beta, alternative = alternative, R=R),
+        parameters = list(A = A, a = ifelse(dist %in% c("binorm","obs_binorm"), a, NA), b = ifelse(dist %in% c("binorm","obs_binorm"), b, NA), alpha = alpha, beta = beta, L = L, R = R),
         html_report = html_report
       ),
       class = "diag_sample_size_html"
     )
   )
 
-
 }
+

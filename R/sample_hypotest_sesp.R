@@ -1,28 +1,33 @@
 #' Sample Size Calculator for Diagnostic Tests
 #'
-#' Calculate the required sample size for estimating sensitivity or specificity of a single diagnostic test.
+#' Calculate the required sample size for testing the hypothesis that sensitivity or specificity of a new test is equal to a particular value.
 #'
-#' @param theta (numeric). The conjectured sensitivity or specificity.
-#' @param alpha (numeric). Significance level (default: 0.05).
-#' @param beta (numeric). Type II error rate (default: NULL).
-#' @param L (numeric). The desired length of one-half of the (1-α)×100% confidence interval for sensitivity/specificity.
+#' @param theta (numeric): The conjectured sensitivity or specificity.
+#' @param theta (numeric): The conjectured sensitivity or specificity.
+#' @param alpha (numeric): Significance level (default: 0.05).
+#' @param beta (numeric): Type II error rate (default: NULL).
+#' @param alternative (character): Type of test, must be one of "less", "greater", or "two.sided" (default: "two.sided").
+#' @param R (numeric): Ratio of patients without to with the condition (default: 1).
 #' @return An object of class "diag_sample_size_html" containing:
-#'   - `sample_size`(list): Required sample size.
-#'   - `parameters`(list): Input parameters.
-#'   - `html_report`(html): Sample size calculation report.
+#'   - `sample_size` (list): Required sample size.
+#'   - `parameters` (list): Input parameters.
+#'   - `html_report` (html): Sample size calculation report.
 #' @importFrom stats qnorm
 #' @examples
-#' n1 <- sample_estimate_sesp(theta=0.8, alpha=0.05, beta=0.2, L=0.05) #502
+#' n1 <- sample_hypotest_sesp(theta_null=0.5, theta_alter=0.8, alpha=0.05, beta=0.2, alternative="two.sided", R=1) #20
 #' print(n1)
-#' n2 <- sample_estimate_sesp(theta=0.8, alpha=0.05, L=0.05)
-#' print(n2)
+
 #' @export
-sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
+sample_hypotest_sesp <- function(theta_null, theta_alter, alpha=0.05, beta=NULL, alternative="two.sided", R=1){
 
   #  (1) ----- validate inputs
 
-  if (!is.numeric(theta) || length(theta) != 1 || theta <= 0 || theta >= 1) {
-    stop("'theta' must be a single numeric value in (0,1).")
+  if (!is.numeric(theta_null) || length(theta_null) != 1 || theta_null <= 0 || theta_null >= 1) {
+    stop("'theta_null' must be a single numeric value in (0,1).")
+  }
+
+  if (!is.numeric(theta_alter) || length(theta_alter) != 1 || theta_alter <= 0 || theta_alter >= 1) {
+    stop("'theta_alter' must be a single numeric value in (0,1).")
   }
 
   if (!is.numeric(alpha) || length(alpha) != 1 || alpha <= 0 || alpha >= 1) {
@@ -33,8 +38,12 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
     stop("'beta' must be a single numeric value in (0,1), or NULL.")
   }
 
-  if (!is.numeric(L) || length(L) != 1 || L <= 0 || L > 0.5 ) {
-    stop("'L' must be a single numeric value in (0, 0.5).")
+  if (!is.character(alternative) || length(alternative) != 1  || !(alternative %in% c("two.sided", "greater", "less"))) {
+    stop("'alternative' must be one of 'two.sided', 'greater' or 'less'.")
+  }
+
+  if (!is.numeric(R) || length(R) != 1 || R <= 0) {
+    stop("'R' must be a single positive numeric value.")
   }
 
   requireNamespace("htmltools", quietly = TRUE) || stop("Package 'htmltools' is required. Please install it first.")
@@ -42,19 +51,50 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
 
   #  (2) ----- Calculation modules
 
+  message(paste0("Null hypothesis: θ = ", theta_null))
+
+  if(alternative == "two.sided"){
+
+    message(paste0("Alternative hypothesis: θ ≠ "), theta_null)
+
+  } else if(alternative == "greater") {
+
+    message(paste0("Alternative hypothesis: θ > "), theta_null)
+
+  } else if(alternative == "less") {
+
+    message(paste0("Alternative hypothesis: θ < "), theta_null)
+  }
+
+  ## adjust alpha for alternative test
+  alpha <- switch(
+    alternative,
+    "less" = 2 * alpha,
+    "greater" = 2 * alpha,
+    "two.sided" = alpha,
+    stop("Invalid 'alternative' value. Use 'less', 'greater', or 'two.sided'.")
+  )
+
+
   ## calculate variance function
-  var_function <- theta*(1-theta)
+  V0_theta <- theta_null*(1-theta_null)
+  VA_theta <- theta_alter*(1-theta_alter)
+
+  var_function <- c(V0_theta, VA_theta)
+  delta <- abs(theta_null - theta_alter)
 
   ## calculate sample size
   N <- get_diag_sample(
     var_function = var_function,
     alpha = alpha,
     beta = beta,
-    delta = L,
-    test_type = "one_diagnostic"
+    delta = delta,
+    test_type = "two_diagnostic"
   )
 
-  n_total <- N
+  n_with_condition <- ceiling(N)
+  n_without_condition <- ceiling(N*R)
+  n_total <- n_with_condition + n_without_condition
 
   #  (3) ----- Structured outputs
 
@@ -78,11 +118,11 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
       ## 1.Objective
       htmltools::tags$p(
         htmltools::tags$strong("Objective:"),
-          "To evaluate the ",
-          htmltools::tags$strong(style = paste0("color:", ifelse(theta > 0.5, "#E74C3C", "#27AE60"), ";"),"sensitivity"),
+          "To test whether the ",
+          htmltools::tags$strong(style = paste0("color:", ifelse(theta_alter > 0.5, "#E74C3C", "#27AE60"), ";"),"sensitivity"),
           "or ",
-          htmltools::tags$strong(style = paste0("color:", ifelse(theta > 0.5, "#E74C3C", "#27AE60"), ";"),"specificity"),
-        " of a new diagnostic test"
+          htmltools::tags$strong(style = paste0("color:", ifelse(theta_alter > 0.5, "#E74C3C", "#27AE60"), ";"),"specificity"),
+        " of a new diagnostic test is equal to a pre-determined value"
         ),
 
       ## 2.Type
@@ -104,25 +144,29 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
     htmltools::tags$h3("📊 Key Parameters"),
       DT::datatable(
         data.frame(
-          Parameter = c("Target Accuracy",
+          Parameter = c("Target Accuracy under Null Hypothesis",
+                        "Target Accuracy under Alternative Hypothesis",
                         "Confidence Level",
                         "Statistical Power",
-                        "Margin of Error"
+                        "Group Allocation"
                       ),
-          Symbol    = c("θ",
+          Symbol    = c("θ0",
+                        "θ1",
                         "1 - α",
                         "1 - β",
-                        "± L"
+                        "R"
                       ),
-          Value     = c(paste0(round(theta*100, 1), "%"),
+          Value     = c(paste0(round(theta_null*100, 1), "%"),
+                        paste0(round(theta_alter*100, 1), "%"),
                         paste0((1-alpha)*100, "%"),
-                        ifelse(is.null(beta), "Not specified", paste0((1-beta)*100, "%")),
-                        paste0("±", L*100, "%")
+                        paste0((1-beta)*100, "%"),
+                        R
                       ),
-          Notes     = c("Desired sensitivity or specificity",
+          Notes     = c("Assumed sensitivity or specificity under null hypothesis",
+                        "Assumed sensitivity or specificity under alternative hypothesis",
                         "1 - Type I error rate",
                         "1 - Type II error rate",
-                        "Half-width of CI"
+                        "Ratio of patients without to with the condition"
                       )
         ),
 
@@ -147,64 +191,12 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
             "Step 1: Sample Size Formula"
           ),
 
-            htmltools::tags$p(
-              "For estimating sensitivity/specificity with a given precision, the required sample size is calculated using the formula:"
-            ),
-
-            if (is.null(beta)) {
-              htmltools::tags$div(
-                style = "text-align: center; margin: 10px 0;",
-
-                htmltools::tags$p(
-                  style = paste(
-                    "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                    # "font-size: 1.2em;",
-                    "padding: 5px;",
-                    "background-color: white;",
-                    "border-radius: 5px;",
-                    "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                    "display: inline-block;"
-                  ),
-
-                  "$$ n = \\dfrac{[Z_{\\alpha/2} \\sqrt{V(\\hat{\\theta})}]^2}{L^2} $$"
-                )
-              )
-
-            } else {
-              htmltools::tags$div(
-                style = "text-align: center; margin: 10px 0;",
-
-                htmltools::tags$p(
-                  style = paste(
-                    "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
-                    # "font-size: 1.2em;",
-                    "padding: 5px;",
-                    "background-color: white;",
-                    "border-radius: 5px;",
-                    "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
-                    "display: inline-block;"
-                  ),
-
-                  "$$ n = \\dfrac{[(Z_{\\alpha/2}+Z_{\\beta}) \\sqrt{V(\\hat{\\theta})}]^2}{L^2} $$"
-                )
-              )
-
-            }
-
-        ),
-
-        ## step 2
-        htmltools::tags$div(
-          class = "formula-step",
-
-          htmltools::tags$h4(
-            style = "color: #2980B9; margin-top: 0;",
-            "Step 2: Variance Function"
+          htmltools::tags$p(
+            "For testing whether the sensitivity or specificity is equal to a pre-determined value, the null and alternative hypotheses are:"
           ),
 
-            htmltools::tags$p(
-              "The variance function is calculated through:"
-            ),
+
+          if(alternative == "two.sided") {
 
             htmltools::tags$div(
               style = "text-align: center; margin: 10px 0;",
@@ -220,9 +212,152 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
                   "display: inline-block;"
                 ),
 
-                "$$ V(\\hat{\\theta}) = \\theta \\times (1-\\theta) $$"
+                "$$ H_{0}: \\theta = \\theta_{0} $$",
+                "$$ H_{1}: \\theta ≠ \\theta_{0} $$"
               )
             )
+
+          } else if(alternative == "greater") {
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+
+              htmltools::tags$p(
+                style = paste(
+                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                  # "font-size: 1.2em;",
+                  "padding: 5px;",
+                  "background-color: white;",
+                  "border-radius: 5px;",
+                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                  "display: inline-block;"
+                ),
+
+                "$$ H_{0}: \\theta = \\theta_{0} $$",
+                "$$ H_{1}: \\theta > \\theta_{0} $$"
+              )
+            )
+          } else if(alternative == "less") {
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+
+              htmltools::tags$p(
+                style = paste(
+                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                  # "font-size: 1.2em;",
+                  "padding: 5px;",
+                  "background-color: white;",
+                  "border-radius: 5px;",
+                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                  "display: inline-block;"
+                ),
+
+                "$$ H_{0}: \\theta = \\theta_{0} $$",
+                "$$ H_{1}: \\theta < \\theta_{0} $$"
+              )
+            )
+          },
+
+
+          htmltools::tags$p(
+            "The required sample size is calculated using the formula:"
+          ),
+
+          if(alternative == "two.sided") {
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+
+              htmltools::tags$p(
+                style = paste(
+                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                  # "font-size: 1.2em;",
+                  "padding: 5px;",
+                  "background-color: white;",
+                  "border-radius: 5px;",
+                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                  "display: inline-block;"
+                ),
+
+                "$$ n = \\dfrac{[Z_{\\alpha/2}\\sqrt{V_{0}(\\hat{\\theta})}+Z_{\\beta} \\sqrt{V_{A}(\\hat{\\theta})}]^2}{(\\theta_{0}-\\theta_{1})^2} $$"
+              )
+            )
+
+          } else {
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+
+              htmltools::tags$p(
+                style = paste(
+                  "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                  # "font-size: 1.2em;",
+                  "padding: 5px;",
+                  "background-color: white;",
+                  "border-radius: 5px;",
+                  "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                  "display: inline-block;"
+                ),
+
+                "$$ n = \\dfrac{[Z_{\\alpha}\\sqrt{V_{0}(\\hat{\\theta})}+Z_{\\beta} \\sqrt{V_{A}(\\hat{\\theta})}]^2}{(\\theta_{0}-\\theta_{1})^2} $$"
+              )
+            )
+
+          }
+
+        ),
+
+        ## step 2
+        htmltools::tags$div(
+          class = "formula-step",
+
+          htmltools::tags$h4(
+            style = "color: #2980B9; margin-top: 0;",
+            "Step 2: Variance Function"
+          ),
+
+          htmltools::tags$p(
+            "The variance function in the null hypothsis is calculated through:"
+          ),
+
+          htmltools::tags$div(
+            style = "text-align: center; margin: 10px 0;",
+
+            htmltools::tags$p(
+              style = paste(
+                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                # "font-size: 1.2em;",
+                "padding: 5px;",
+                "background-color: white;",
+                "border-radius: 5px;",
+                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                "display: inline-block;"
+              ),
+
+              "$$ V_{0}(\\hat{\\theta}) = \\theta_{0} \\times (1-\\theta_{0}) $$"
+            )
+          ),
+
+          htmltools::tags$p(
+            "Similarly, the variance function in the alternative hypothsis is calculated through:"
+          ),
+
+          htmltools::tags$div(
+            style = "text-align: center; margin: 10px 0;",
+
+            htmltools::tags$p(
+              style = paste(
+                "font-family: 'Cambria Math', 'Latin Modern Math', serif;",
+                # "font-size: 1.2em;",
+                "padding: 5px;",
+                "background-color: white;",
+                "border-radius: 5px;",
+                "box-shadow: 0 2px 5px rgba(0,0,0,0.05);",
+                "display: inline-block;"
+              ),
+
+              "$$ V_{A}(\\hat{\\theta}) = \\theta_{1} \\times (1-\\theta_{1}) $$"
+            )
+          )
 
         ),
 
@@ -239,98 +374,109 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
               "First, calculate the Z-score for the given confidence level:"
             ),
 
-              if(is.null(beta)) {
-                htmltools::tags$div(
-                  style = "text-align: center; margin: 10px 0;",
-                  htmltools::tags$p(
-                    style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                    sprintf(
-                      "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
-                      alpha/2, qnorm(alpha/2)
-                    )
-                  )
-                )
-              } else {
-                htmltools::tags$div(
-                  style = "text-align: center; margin: 10px 0;",
-                  htmltools::tags$p(
-                    style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
-                    sprintf(
-                      "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
-                      alpha/2, qnorm(alpha/2)
-                    ),
-                    sprintf(
-                      "$$z_{\\beta} = z_{%.2f} = %.3f $$",
-                      beta, qnorm(beta)
-                    )
-                  )
-                )
-
-              },
-
-
-            htmltools::tags$p(
-              "Next, compute the variance function term:"
-            ),
+            if(alternative == "two.sided") {
 
               htmltools::tags$div(
                 style = "text-align: center; margin: 10px 0;",
                 htmltools::tags$p(
                   style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
                   sprintf(
-                    "$$V(\\hat{\\theta}) = %.3f × (1 - %.3f) = %.3f $$",
-                    theta, theta, theta*(1-theta)
+                    "$$z_{\\alpha/2} = z_{%.3f} = %.3f $$",
+                    alpha/2, qnorm(alpha/2)
+                  ),
+                  sprintf(
+                    "$$z_{\\beta} = z_{%.2f} = %.3f $$",
+                    beta, qnorm(beta)
                   )
                 )
-              ),
+              )
+            } else {
+              htmltools::tags$div(
+                style = "text-align: center; margin: 10px 0;",
+                htmltools::tags$p(
+                  style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                  sprintf(
+                    "$$z_{\\alpha} = z_{%.3f} = %.3f $$",
+                    alpha/2, qnorm(alpha/2)
+                  ),
+                  sprintf(
+                    "$$z_{\\beta} = z_{%.2f} = %.3f $$",
+                    beta, qnorm(beta)
+                  )
+                )
+              )
+
+            },
+
+
+            htmltools::tags$p(
+              "Next, compute the variance function term:"
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  "$$V_{0}(\\hat{\\theta}) = %.3f × (1 - %.3f) = %.3f $$",
+                  theta_null, theta_null, theta_null*(1-theta_null)
+                )
+              )
+            ),
+
+            htmltools::tags$div(
+              style = "text-align: center; margin: 10px 0;",
+              htmltools::tags$p(
+                style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+                sprintf(
+                  "$$V_{A}(\\hat{\\theta}) = %.3f × (1 - %.3f) = %.3f $$",
+                  theta_alter, theta_alter, theta_alter*(1-theta_alter)
+                )
+              )
+            ),
 
 
             htmltools::tags$p(
               "Now apply the full formula:"
             ),
 
-              if(is.null(beta)) {
-                htmltools::tags$div(
-                  style = "text-align: center; margin: 15px 0;",
+          htmltools::tags$div(
+            style = "text-align: center; margin: 15px 0;",
 
-                  htmltools::tags$p(
-                    style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
 
-                    htmltools::HTML(
-                      sprintf(
-                        "$$n = \\dfrac{[(%.3f)\\times \\sqrt{%.3f}]^2}{(%.3f)^2} ≈ %d$$",
-                        qnorm(alpha/2),
-                        theta*(1-theta),
-                        L,
-                        n_total
-                      )
-                    )
-
-                  )
-
+              htmltools::HTML(
+                sprintf(
+                  "$$n = \\dfrac{[(%.3f) \\times \\sqrt{%.3f} + (%.3f) \\times \\sqrt{%.3f}]^2}{(%.3f-%.3f)^2} ≈ %d$$",
+                  qnorm(alpha/2),
+                  theta_null*(1-theta_null),
+                  qnorm(beta),
+                  theta_alter*(1-theta_alter),
+                  theta_null,
+                  theta_alter,
+                  N
                 )
-              } else{
-                htmltools::tags$div(
-                  style = "text-align: center; margin: 15px 0;",
+              )
 
-                  htmltools::tags$p(
-                    style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+            )
 
-                    htmltools::HTML(
-                      sprintf(
-                        "$$n = \\dfrac{\\{[(%.3f)+(%.3f)]\\times \\sqrt{%.3f}\\}^2}{(%.3f)^2} ≈ %d$$",
-                        qnorm(alpha/2),
-                        qnorm(beta),
-                        theta*(1-theta),
-                        L,
-                        n_total
-                      )
-                    )
+          ),
 
-                  )
+          htmltools::tags$p(
+            "Thus,"
+          ),
 
-                )
-              }
+          htmltools::tags$div(
+            style = "text-align: center; margin: 10px 0;",
+            htmltools::tags$p(
+              style = "font-family: 'Cambria Math', serif; font-size: 1.1em;",
+              sprintf(
+                paste0("$$ N_{+} = n = %d, N_{-} = R \\times n = %d$$"),
+                n_with_condition, n_without_condition
+              )
+            )
+          )
 
         ),
 
@@ -368,13 +514,11 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
 
         htmltools::tags$p(
           style = "font-size: 24px; font-weight: bold; color: #2E86C1;",
-          n_total
+          paste0(n_with_condition," / ", n_without_condition)
         ),
 
         htmltools::tags$p(
-          paste0("This provides ", (1-alpha)*100, "% confidence that the estimated sensitivity or specificity"),
-          paste0(" will be within ±", L*100, "% of the true value"),
-          ifelse(!is.null(beta), paste0(" with ", (1-beta)*100, "% power"), "")
+          paste0("This provides ", (1-alpha)*100, "% confidence with ", (1-beta)*100, "% power that the sensitivity or specificity is equal to a pre-determined value")
         )
       ),
 
@@ -389,7 +533,7 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
           style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
           htmltools::tags$strong("1. Method:"),
           htmltools::tags$br(),
-          "Sample size calculations for estimating sensitivity or specificity"
+          "Sample size calculations for hypothesis testing of sensitivity or specificity"
         ),
 
         ## 2.Assumptions
@@ -403,9 +547,9 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
         ## 3.Limitations
         htmltools::tags$p(
           style = "margin: 15px 0px; text-indent: -1em; padding-left: 1.5em;",
-          htmltools::tags$strong("3. Limitations"),
+          htmltools::tags$strong("3. Limitations:"),
           htmltools::tags$br(),
-          "Not suitable to tests with sensitivities (or specificities) that are close to one"
+          "Work for sensitivities (or specificities) that are not close to one"
         ),
 
         ## 4.Reference:
@@ -576,8 +720,8 @@ sample_estimate_sesp <- function(theta, alpha=0.05, beta=NULL, L){
   invisible(
     structure(
       list(
-        sample_size = list(n_total = n_total),
-        parameters = list(theta = theta, alpha = alpha, beta = beta, L = L),
+        sample_size = list(n_total = n_total, n_with_condition = n_with_condition, n_without_condition = n_without_condition),
+        parameters = list(theta0 = theta_null, theta1 = theta_alter, alpha = alpha, beta = beta, alternative = alternative, R = R),
         html_report = html_report
       ),
       class = "diag_sample_size_html"
