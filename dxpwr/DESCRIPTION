@@ -15,6 +15,7 @@ Depends:
     R (>= 4.4.1)
 Imports: 
     ggplot2,
+    pROC,
     dplyr,
     stats,
     methods
