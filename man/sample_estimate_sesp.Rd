@@ -18,9 +18,9 @@ sample_estimate_sesp(theta, alpha = 0.05, beta = NULL, L)
 \value{
 An object of class "diag_sample_size_html" containing:
 \itemize{
-\item \code{sample_size}: Required sample size.
-\item \code{parameters}: Input parameters.
-\item \code{html_report}: Sample size calculation report.
+\item \code{sample_size}(list): Required sample size.
+\item \code{parameters}(list): Input parameters.
+\item \code{html_report}(html): Sample size calculation report.
 }
 }
 \description{

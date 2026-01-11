@@ -7,7 +7,7 @@
 sample_equivalence_sesp(
   theta_S,
   theta_E,
-  prob_t1pos_give_t2pos = NULL,
+  p_ts_pos_given_te_pos = NULL,
   delta,
   alpha = 0.05,
   beta,
@@ -16,17 +16,19 @@ sample_equivalence_sesp(
 )
 }
 \arguments{
-\item{theta_S}{(numeric): The expected sensitivity (or specificity) of an existing test (standard test).}
+\item{theta_S}{(numeric): The expected sensitivity (or specificity) of an established standard test (test S).}
 
-\item{theta_E}{(numeric): The expected sensitivity (or specificity) of a new test (experimental test).}
+\item{theta_E}{(numeric): The expected sensitivity (or specificity) of a new experimental test (test E).}
 
-\item{prob_t1pos_give_t2pos}{(numeric): Conditional probability of the existing test being positive when the new test being positive.}
+\item{p_ts_pos_given_te_pos}{(numeric): Conditional probability of the standard test being positive when experimental test being positive.}
 
-\item{delta}{(numeric): The prespecified upper clinical limits for equivalence.}
+\item{delta}{(numeric): prespecified upper clinical limits for equivalence.}
 
 \item{alpha}{(numeric): Significance level (default: 0.05).}
 
 \item{beta}{(numeric): Type II error rate.}
+
+\item{R}{(numeric): Ratio of patients without to with the condition (default: 1).}
 
 \item{paired}{(character): Whether the design is paired (\code{TRUE}) or unpaired (\code{FALSE}).}
 }
@@ -39,9 +41,9 @@ An object of class "diag_sample_size_html" containing:
 }
 }
 \description{
-Calculate the required sample size for testing whether the sensitivity/specificity of a new test is equivalent to an existing test.
+Calculate the required sample size for testing whether the sensitivity/specificity of a new experimental test (test E) is equivalent to an established standard test (test E).
 }
 \examples{
-n <- sample_equivalence_sesp(theta_S=0.9, theta_E=0.88, prob_t1pos_give_t2pos=0, delta=0.05, alpha=0.05, beta=0.2, R=1, paired=FALSE)
+n <- sample_equivalence_sesp(theta_S=0.9, theta_E=0.92, p_ts_pos_given_te_pos=0.5, delta=0.1, alpha=0.05, beta=0.2, R=1, paired=TRUE)
 print(n)
 }

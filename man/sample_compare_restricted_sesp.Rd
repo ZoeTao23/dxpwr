@@ -50,9 +50,9 @@ sample_compare_restricted_sesp(
 
 \item{beta}{(numeric): Type II error rate.}
 
-\item{paired}{(logical). Whether the design is paired (\code{TRUE}) or unpaired (\code{FALSE}).}
+\item{paired}{(logical): Whether the design is paired (\code{TRUE}) or unpaired (\code{FALSE}).}
 
-\item{R}{(numeric): Ratio of patients with and without the condition (default: 1).}
+\item{R}{(numeric): Ratio of patients without to with the condition (default: 1).}
 
 \item{dist}{(Character): The assumption for choosing the variance function (default: "binorm"):
 \itemize{

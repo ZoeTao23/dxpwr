@@ -27,17 +27,17 @@ sample_estimate_restricted_sesp(
 
 \item{b}{(numeric): Ratio of the standard deviations of the distributions of test results for patients without versus with the condition, σ_without/σ_with (default: 1).}
 
-\item{e}{(Numeric): For "sens" provide false positive rate value, and for "spec" provide false negative rate value.}
+\item{e}{(numeric): For "sens" provide false positive rate value, and for "spec" provide false negative rate value.}
 
-\item{alpha}{(Numeric): Significance level (default: 0.05).}
+\item{alpha}{(numeric): Significance level (default: 0.05).}
 
-\item{beta}{(Numeric): Type II error rate (default: NULL).}
+\item{beta}{(numeric): Type II error rate (default: NULL).}
 
-\item{L}{(Numeric): The desired length of one-half of the (1-α)×100\% confidence interval for sensitivity/specificity.}
+\item{L}{(numeric): The desired length of one-half of the (1-α)×100\% confidence interval for sensitivity/specificity.}
 
-\item{R}{(Numeric): Ratio of patients with and without the condition (default: 1).}
+\item{R}{(numeric): Ratio of patients without to with the condition (default: 1).}
 
-\item{dist}{(Character): The assumption for choosing the variance function (default: "binorm"):
+\item{dist}{(character): The assumption for choosing the variance function (default: "binorm"):
 \itemize{
 \item \code{"binorm"}: Assume that the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution.
 \item \code{"obs_binorm"}: Assume that the observed test results are on a truly continuous scale and they follow a binormal distribution (or can be transformed to a binormal distribution).

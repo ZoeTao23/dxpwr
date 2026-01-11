@@ -11,23 +11,32 @@ sample_hypotest_auc(
   alpha = 0.05,
   beta,
   alternative = "two.sided",
-  R = 1
+  R = 1,
+  dist = "any"
 )
 }
 \arguments{
-\item{A_null}{Numeric, assumed null hypothesis AUC (0.5 < A_null < 1).}
+\item{A_null}{(numeric): AUC under the null hypothesis (default: NULL).}
 
-\item{A_alter}{Numeric, alternative hypothesis AUC (0.5 < A_alter < 1).}
+\item{A_alter}{(numeric): AUC under the alternative hypothesis (default: NULL).}
 
-\item{b}{Numeric, standard deviation ratio (default is 1, must be > 0).}
+\item{b}{(numeric): Ratio of the standard deviations of the distributions of results for patients without versus with the condition, σ_without/σ_with (default: 1).}
 
-\item{alpha}{Numeric, significance level (0 < alpha < 1).}
+\item{alpha}{(numeric): Significance level (0 < alpha < 1).}
 
-\item{beta}{Numeric, Type II error (0 < beta < 1, power = 1 - beta).}
+\item{beta}{(numeric): Type II error (0 < beta < 1, power = 1 - beta).}
 
-\item{alternative}{Character, type of test, must be one of "less", "greater", or "two.sided" (default: "two.sided").}
+\item{alternative}{(character): Type of test, must be one of "less", "greater", or "two.sided" (default: "two.sided").}
 
-\item{R}{Numeric, ratio of non-diseased to diseased subjects (default is 1, must be > 0).}
+\item{R}{(numeric): Ratio of patients with and without the condition (default: 1).}
+
+\item{dist}{(character): The assumption for choosing the variance function (default: "any"):
+\itemize{
+\item \code{"any"}: Applicable for all distributions.
+\item \code{"exp"}: Assume that the unobserved, underlying test results follow an exponential distribution, but the observed test results, either continuous or ordinal, do not necessarily have an exponential distribution
+\item \code{"binorm"}: Assume that the unobserved, underlying test results follow a binormal distribution, but the observed test results, either continuous or ordinal, do not necessarily have a binormal distribution
+\item \code{"obs_binorm"}: Assume that the observed test results are on a truly continuous scale and follow a binormal distribution or can be transformed to a binormal distribution.
+}}
 }
 \value{
 An object of class "diag_sample_size_html" containing:
@@ -43,9 +52,9 @@ Computes the required sample size for testing whether the AUC is equal to a spec
 \details{
 Sample Size Calculator for Diagnostic Tests
 
-Calculate the required sample size for testing the hypothesis that the Area Under the ROC Curve is equal to a particular value.
+Calculate the required sample size for testing the hypothesis that the Area Under the ROC Curve of a new test is equal to a particular value.
 }
 \examples{
-n <- sample_hypotest_auc(A_null=0.5, A_alter=0.8, alpha=0.05, beta=0.2, alternative="two.sided", R=1)
+n <- sample_hypotest_auc(A_null=0.5, A_alter=0.8, alpha=0.05, beta=0.2, alternative="two.sided", R=1, dist="binorm")
 print(n)
 }

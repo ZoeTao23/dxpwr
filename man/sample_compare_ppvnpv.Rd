@@ -17,9 +17,9 @@ sample_compare_ppvnpv(
 )
 }
 \arguments{
-\item{theta2}{Numeric. NPV or PPV of test 2 (0 < theta2 < 1).}
+\item{theta2}{(numeric): NPV or PPV of test 2 (0 < theta2 < 1).}
 
-\item{p}{Numeric vector (length = 8). Probability components required for calculation.
+\item{p}{(list): vector (length = 8). Probability components required for calculation.
 \describe{
 For patients without the condition：
 \item{p\link{1}}{the proportion of patients testing positive on both tests}
@@ -33,19 +33,19 @@ For patients with the condition：
 \item{p\link{8}}{the proportion testing negative on both tests}
 }}
 
-\item{alpha}{Numeric. Significance level (0 < alpha < 1).}
+\item{alpha}{(numeric): Significance level (0 < alpha < 1).}
 
-\item{beta}{Numeric. Type II error rate (0 < beta < 1).}
+\item{beta}{(numeric): Type II error rate (0 < beta < 1).}
 
-\item{gamma}{Numeric. A specific value of interest for rPPV under the alternative hypothesis (gamma > 0).}
+\item{gamma}{(numeric): A specific value of interest for rPPV under the alternative hypothesis (gamma > 0).}
 
-\item{delta}{Numeric. The null hypothesis is rPPV = delta. (In most cases, let delta = 1).}
+\item{delta}{(numeric): The null hypothesis is rPPV = delta. (In most cases, let delta = 1).}
 
-\item{paired}{Logical. Whether the design is paired (\code{TRUE}) or unpaired (\code{FALSE}).}
+\item{paired}{(logical): Whether the design is paired (\code{TRUE}) or unpaired (\code{FALSE}).}
 
-\item{alternative}{Character. \code{"less"}, \code{"greater"}, or \code{"two.sided"}.}
+\item{alternative}{(character): \code{"less"}, \code{"greater"}, or \code{"two.sided"}.}
 
-\item{choice}{Character. \code{"PPV"} for positive predictive value, \code{"NPV"} for negative predictive value.}
+\item{choice}{(character): \code{"PPV"} for positive predictive value, \code{"NPV"} for negative predictive value.}
 }
 \value{
 An object of class "diag_sample_size_html" containing:
