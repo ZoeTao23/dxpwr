@@ -12,12 +12,6 @@ A companion web‑based calculator offers the main functionality through an intu
 5. **Dual interface** – Use the R package for programmatic, reproducible workflows, or the web app for interactive, guided planning.
 
 ## 🧪 Supported Designs 
-| Design Type | Primary Objective | Statistical Approach |
-|-------------|-------------------|----------------------|
-| Single‑test evaluation | Estimate accuracy (sensitivity, specificity, AUC, etc.) | Confidence‑interval width for a single proportion or AUC |
-| Comparative – difference | Demonstrate a difference in accuracy between two tests | Hypothesis test for difference in proportions or AUCs |
-| Comparative – equivalence | Demonstrate equivalent accuracy between two tests | Two one‑sided tests (TOST) for equivalence margins |
-| Comparative – non‑inferiority | Demonstrate that a new test is not worse than a reference | One‑sided test with a pre‑specified non‑inferiority margin |
 ![Supported Designs Overview](user_guide.png)
 Both **paired** (same participants receive both tests) and **unpaired** (different participants for each test) designs are supported.
 
